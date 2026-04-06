@@ -489,7 +489,12 @@ async function startServer() {
             s.isSpotTradingAllowed === true &&
             SPOT_DOLLAR_QUOTES.has(s.quoteAsset)
         )
-        .map((s: any) => ({ symbol: s.symbol, baseAsset: s.baseAsset, quoteAsset: s.quoteAsset }));
+        .map((s: any) => ({ 
+          symbol: s.symbol, 
+          baseAsset: s.baseAsset, 
+          quoteAsset: s.quoteAsset,
+          filters: s.filters
+        }));
       res.json({ ok: true, symbols });
     } catch (e: any) {
       res.status(500).json({ error: "spot_symbols_failed", details: e?.binance || e?.message || String(e) });
@@ -501,7 +506,12 @@ async function startServer() {
       const info = await pubFetch(FUT_BASE, "/fapi/v1/exchangeInfo", {});
       const symbols = (info.symbols || [])
         .filter((s: any) => s.status === "TRADING" && s.contractType === "PERPETUAL")
-        .map((s: any) => ({ symbol: s.symbol, baseAsset: s.baseAsset, quoteAsset: s.quoteAsset }));
+        .map((s: any) => ({ 
+          symbol: s.symbol, 
+          baseAsset: s.baseAsset, 
+          quoteAsset: s.quoteAsset,
+          filters: s.filters
+        }));
       res.json({ ok: true, symbols });
     } catch (e: any) {
       res.status(500).json({ error: "futures_symbols_failed", details: e?.binance || e?.message || String(e) });
@@ -676,14 +686,16 @@ async function startServer() {
   });
 
   app.post("/api/futures/trade", authMiddleware, async (req: any, res) => {
-    const { symbol, side, notional, tpPct, slPct } = req.body || {};
-    if (!symbol || !side || !notional) {
-      return res.status(400).json({ error: "symbol_side_notional_required" });
+    const { symbol, side, notional, quantity, tpPct, slPct } = req.body || {};
+    if (!symbol || !side || (!notional && !quantity)) {
+      return res.status(400).json({ error: "symbol_side_notional_or_quantity_required" });
     }
 
-    const n = Number(notional);
-    if (n < MIN_TRADE_USD || n > MAX_TRADE_USD) {
-      return res.status(400).json({ error: `Notional must be between $${MIN_TRADE_USD} and $${MAX_TRADE_USD}` });
+    if (notional) {
+      const n = Number(notional);
+      if (n < MIN_TRADE_USD || n > MAX_TRADE_USD) {
+        return res.status(400).json({ error: `Notional must be between $${MIN_TRADE_USD} and $${MAX_TRADE_USD}` });
+      }
     }
 
     if (!ALLOW_LIVE_ORDERS) {
@@ -722,7 +734,7 @@ async function startServer() {
           }).catch(() => {});
 
           // 2. Calculate Qty
-          let qty = notional / price;
+          let qty = quantity ? Number(quantity) : (notional / price);
           if (filters.stepSize) qty = floorToStep(qty, filters.stepSize);
           if (filters.minQty && qty < filters.minQty) qty = filters.minQty;
 

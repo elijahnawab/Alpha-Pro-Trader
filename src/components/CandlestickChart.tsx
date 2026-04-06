@@ -1,5 +1,18 @@
-import React, { useEffect, useRef, useMemo } from 'react';
-import * as d3 from 'd3';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
+import { 
+  createChart, 
+  IChartApi, 
+  ISeriesApi, 
+  CandlestickData, 
+  LineData, 
+  Time,
+  ColorType,
+  CrosshairMode,
+  CandlestickSeries,
+  BarSeries,
+  LineSeries,
+  HistogramSeries
+} from 'lightweight-charts';
 
 interface CandleData {
   time: number;
@@ -7,15 +20,12 @@ interface CandleData {
   high: number;
   low: number;
   close: number;
-  macd?: {
-    macdLine: number;
-    signalLine: number;
-    histogram: number;
-  };
 }
 
 interface CandlestickChartProps {
   data: CandleData[];
+  emaShort?: number;
+  emaLong?: number;
   showMacd?: boolean;
   macdFast?: number;
   macdSlow?: number;
@@ -24,18 +34,32 @@ interface CandlestickChartProps {
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ 
   data, 
+  emaShort = 5,
+  emaLong = 13,
   showMacd = true,
   macdFast = 12,
   macdSlow = 26,
   macdSignal = 9
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const macdContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const macdChartRef = useRef<IChartApi | null>(null);
+  const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const ohlcSeriesRef = useRef<ISeriesApi<"Bar"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const emaShortSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const emaLongSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const macdLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const signalLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const histogramSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
-  // EMA Helper optimized for performance
-  const calculateEMA = (values: number[] | Float64Array, period: number) => {
+  const [chartType, setChartType] = useState<'CANDLE' | 'OHLC'>('CANDLE');
+
+  // EMA Helper
+  const calculateEMA = (values: number[], period: number) => {
     const n = values.length;
-    const series = new Float64Array(n);
+    const series: number[] = new Array(n).fill(0);
     if (n === 0) return series;
     
     const k = 2 / (period + 1);
@@ -49,291 +73,274 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     return series;
   };
 
-  // Memoize processed data with indicators and efficient aggregation
-  const processedData = useMemo(() => {
-    const n = data.length;
-    if (n === 0) return [];
-
-    // 1. Calculate indicators on full data for accuracy using typed arrays
-    const closes = new Float64Array(n);
-    for (let i = 0; i < n; i++) closes[i] = data[i].close;
-
-    const emaFast = calculateEMA(closes, macdFast);
-    const emaSlow = calculateEMA(closes, macdSlow);
-    
-    const macdLines = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      macdLines[i] = emaFast[i] - emaSlow[i];
-    }
-    
-    const signalLines = calculateEMA(macdLines, macdSignal);
-    
-    // 2. Downsample using OHLC aggregation if data is too large
-    const maxPoints = 300;
-    if (n <= maxPoints) {
-      return data.map((d, i) => ({
-        ...d,
-        macd: {
-          macdLine: macdLines[i],
-          signalLine: signalLines[i],
-          histogram: macdLines[i] - signalLines[i]
-        }
-      }));
-    }
-
-    const factor = Math.ceil(n / maxPoints);
-    const aggregated: CandleData[] = [];
-    
-    for (let i = 0; i < n; i += factor) {
-      const end = Math.min(i + factor, n);
-      let high = -Infinity;
-      let low = Infinity;
-      let macdSum = 0;
-      let signalSum = 0;
-      let histSum = 0;
-      
-      for (let j = i; j < end; j++) {
-        const d = data[j];
-        if (d.high > high) high = d.high;
-        if (d.low < low) low = d.low;
-        
-        const mLine = macdLines[j];
-        const sLine = signalLines[j];
-        macdSum += mLine;
-        signalSum += sLine;
-        histSum += (mLine - sLine);
-      }
-      
-      const count = end - i;
-      aggregated.push({
-        time: data[i].time,
-        open: data[i].open,
-        close: data[end - 1].close,
-        high,
-        low,
-        macd: {
-          macdLine: macdSum / count,
-          signalLine: signalSum / count,
-          histogram: histSum / count
-        }
-      });
-    }
-    
-    return aggregated;
-  }, [data]);
+  // MACD Helper
+  const calculateMACD = (closes: number[], fast: number, slow: number, signal: number) => {
+    const emaFast = calculateEMA(closes, fast);
+    const emaSlow = calculateEMA(closes, slow);
+    const macdLine = emaFast.map((f, i) => f - emaSlow[i]);
+    const signalLine = calculateEMA(macdLine, signal);
+    const histogram = macdLine.map((m, i) => m - signalLine[i]);
+    return { macdLine, signalLine, histogram };
+  };
 
   useEffect(() => {
-    if (!containerRef.current || !svgRef.current) return;
+    if (!chartContainerRef.current) return;
 
-    const render = () => {
-      const container = containerRef.current;
-      const svgElement = svgRef.current;
-      if (!container || !svgElement || processedData.length === 0) {
-        d3.select(svgElement).selectAll('*').remove();
-        return;
-      }
-
-      const { width, height } = container.getBoundingClientRect();
-      if (width === 0 || height === 0) return;
-
-      const svg = d3.select(svgElement);
-      svg.selectAll('*').remove();
-
-      // Layout configuration
-      const macdHeight = showMacd ? height * 0.25 : 0;
-      const mainHeight = height - macdHeight - 50; // 50 for margins/axes
-      const margin = { top: 20, right: 50, bottom: 30, left: 10 };
-      
-      const chartWidth = width - margin.left - margin.right;
-      const chartHeight = mainHeight;
-
-      if (chartWidth <= 0 || chartHeight <= 0) return;
-
-      const x = d3.scaleBand()
-        .domain(processedData.map(d => d.time.toString()))
-        .range([0, chartWidth])
-        .padding(processedData.length > 100 ? 0.1 : 0.3);
-
-      const y = d3.scaleLinear()
-        .domain([
-          d3.min(processedData, (d: CandleData) => d.low) || 0,
-          d3.max(processedData, (d: CandleData) => d.high) || 0
-        ])
-        .nice()
-        .range([chartHeight, 0]);
-
-      const g = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-
-      // Grid lines (Horizontal)
-      g.append('g')
-        .attr('class', 'grid')
-        .attr('stroke', 'rgba(255, 255, 255, 0.05)')
-        .attr('stroke-dasharray', '2,2')
-        .call(d3.axisLeft(y)
-          .ticks(5)
-          .tickSize(-chartWidth)
-          .tickFormat(() => '')
-        )
-        .call(g => g.select('.domain').remove());
-
-      // X Axis
-      const tickCount = Math.min(processedData.length, Math.floor(chartWidth / 80));
-      const xAxis = d3.axisBottom(x)
-        .tickValues(x.domain().filter((d, i) => {
-          const step = Math.ceil(processedData.length / tickCount);
-          return i % step === 0;
-        }))
-        .tickFormat(d => {
-          const date = new Date(parseInt(d));
-          return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-        });
-
-      const xAxisG = g.append('g')
-        .attr('transform', `translate(0,${chartHeight + (showMacd ? macdHeight + 10 : 0)})`)
-        .attr('color', 'rgba(255, 255, 255, 0.3)')
-        .call(xAxis);
-      
-      xAxisG.call(g => g.select('.domain').attr('stroke', 'rgba(255,255,255,0.1)'))
-        .selectAll('text')
-        .style('font-size', '10px')
-        .style('font-family', 'monospace');
-
-      // Y Axis
-      g.append('g')
-        .attr('transform', `translate(${chartWidth}, 0)`)
-        .attr('color', 'rgba(255, 255, 255, 0.3)')
-        .call(d3.axisRight(y).ticks(5).tickFormat(d3.format('.2f')))
-        .call(g => g.select('.domain').remove())
-        .selectAll('text')
-        .style('font-size', '10px')
-        .style('font-family', 'monospace');
-
-      // Candlesticks
-      const candleGroup = g.selectAll('.candle')
-        .data(processedData)
-        .enter()
-        .append('g')
-        .attr('class', 'candle');
-
-      const barWidth = x.bandwidth();
-      const halfBarWidth = barWidth / 2;
-
-      // Wicks
-      candleGroup.append('line')
-        .attr('x1', (d: CandleData) => (x(d.time.toString()) || 0) + halfBarWidth)
-        .attr('x2', (d: CandleData) => (x(d.time.toString()) || 0) + halfBarWidth)
-        .attr('y1', (d: CandleData) => y(d.high))
-        .attr('y2', (d: CandleData) => y(d.low))
-        .attr('stroke', (d: CandleData) => d.close >= d.open ? '#10b981' : '#ef4444')
-        .attr('stroke-width', Math.max(1, barWidth * 0.1));
-
-      // Bodies
-      candleGroup.append('rect')
-        .attr('x', (d: CandleData) => x(d.time.toString()) || 0)
-        .attr('y', (d: CandleData) => y(Math.max(d.open, d.close)))
-        .attr('width', barWidth)
-        .attr('height', (d: CandleData) => Math.max(1, Math.abs(y(d.open) - y(d.close))))
-        .attr('fill', (d: CandleData) => d.close >= d.open ? '#10b981' : '#ef4444')
-        .attr('rx', Math.min(2, barWidth * 0.2));
-
-      // MACD Pane
-      if (showMacd) {
-        const macdG = g.append('g')
-          .attr('transform', `translate(0, ${chartHeight + 20})`);
-
-        const macdY = d3.scaleLinear()
-          .domain([
-            d3.min(processedData, (d: CandleData) => Math.min(d.macd?.macdLine || 0, d.macd?.signalLine || 0, d.macd?.histogram || 0)) || 0,
-            d3.max(processedData, (d: CandleData) => Math.max(d.macd?.macdLine || 0, d.macd?.signalLine || 0, d.macd?.histogram || 0)) || 0
-          ])
-          .nice()
-          .range([macdHeight, 0]);
-
-        // MACD Y Axis
-        macdG.append('g')
-          .attr('transform', `translate(${chartWidth}, 0)`)
-          .attr('color', 'rgba(255, 255, 255, 0.2)')
-          .call(d3.axisRight(macdY).ticks(3).tickFormat(d3.format('.2f')))
-          .call(g => g.select('.domain').remove())
-          .selectAll('text')
-          .style('font-size', '8px');
-
-        // Histogram
-        macdG.selectAll('.hist')
-          .data(processedData)
-          .enter()
-          .append('rect')
-          .attr('x', (d: CandleData) => x(d.time.toString()) || 0)
-          .attr('y', (d: CandleData) => d.macd!.histogram >= 0 ? macdY(d.macd!.histogram) : macdY(0))
-          .attr('width', barWidth)
-          .attr('height', (d: CandleData) => Math.abs(macdY(d.macd!.histogram) - macdY(0)))
-          .attr('fill', (d: CandleData) => d.macd!.histogram >= 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)');
-
-        // MACD Line
-        const macdLineGen = d3.line<CandleData>()
-          .x((d: CandleData) => (x(d.time.toString()) || 0) + halfBarWidth)
-          .y((d: CandleData) => macdY(d.macd!.macdLine));
-
-        macdG.append('path')
-          .datum(processedData)
-          .attr('fill', 'none')
-          .attr('stroke', '#38bdf8') // Sky 400
-          .attr('stroke-width', 1.5)
-          .attr('d', macdLineGen);
-
-        // Signal Line
-        const signalLineGen = d3.line<CandleData>()
-          .x((d: CandleData) => (x(d.time.toString()) || 0) + halfBarWidth)
-          .y((d: CandleData) => macdY(d.macd!.signalLine));
-
-        macdG.append('path')
-          .datum(processedData)
-          .attr('fill', 'none')
-          .attr('stroke', '#fbbf24') // Amber 400
-          .attr('stroke-width', 2) // Slightly thicker
-          .attr('stroke-dasharray', '4,2') // More distinct dash pattern
-          .attr('d', signalLineGen);
-          
-        // MACD Zero Line
-        macdG.append('line')
-          .attr('x1', 0)
-          .attr('x2', chartWidth)
-          .attr('y1', macdY(0))
-          .attr('y2', macdY(0))
-          .attr('stroke', 'rgba(255, 255, 255, 0.1)')
-          .attr('stroke-width', 1);
-      }
-    };
-
-    // Initial render
-    render();
-
-    // Responsive handling
-    const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(render);
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: 'rgba(255, 255, 255, 0.5)',
+      },
+      grid: {
+        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+      },
+      timeScale: {
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      handleScroll: true,
+      handleScale: true,
     });
 
-    resizeObserver.observe(containerRef.current);
+    chartRef.current = chart;
+
+    // Main Series
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#10b981',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#10b981',
+      wickDownColor: '#ef4444',
+    });
+    candlestickSeriesRef.current = candlestickSeries;
+
+    const ohlcSeries = chart.addSeries(BarSeries, {
+      upColor: '#10b981',
+      downColor: '#ef4444',
+    });
+    ohlcSeriesRef.current = ohlcSeries;
+
+    // Volume Series
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      color: '#26a69a',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: '', // set as an overlay
+    });
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8, // highest point of the series will be 80% away from the top
+        bottom: 0,
+      },
+    });
+    volumeSeriesRef.current = volumeSeries;
+
+    // EMA Series
+    const emaShortSeries = chart.addSeries(LineSeries, {
+      color: '#38bdf8', // Sky 400
+      lineWidth: 1,
+      priceLineVisible: false,
+    });
+    emaShortSeriesRef.current = emaShortSeries;
+
+    const emaLongSeries = chart.addSeries(LineSeries, {
+      color: '#f472b6', // Pink 400
+      lineWidth: 1,
+      priceLineVisible: false,
+    });
+    emaLongSeriesRef.current = emaLongSeries;
+
+    // MACD Chart
+    let macdChart: IChartApi | null = null;
+    if (showMacd && macdContainerRef.current) {
+      macdChart = createChart(macdContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: 'rgba(255, 255, 255, 0.5)',
+        },
+        grid: {
+          vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+          horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        },
+        rightPriceScale: {
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+        },
+        timeScale: {
+          visible: false, // Hide time scale for MACD chart
+        },
+        handleScroll: false, // Scroll is handled by main chart
+        handleScale: false,
+      });
+      macdChartRef.current = macdChart;
+
+      const macdLineSeries = macdChart.addSeries(LineSeries, {
+        color: '#38bdf8',
+        lineWidth: 1,
+        priceLineVisible: false,
+      });
+      macdLineSeriesRef.current = macdLineSeries;
+
+      const signalLineSeries = macdChart.addSeries(LineSeries, {
+        color: '#fbbf24',
+        lineWidth: 1,
+        priceLineVisible: false,
+      });
+      signalLineSeriesRef.current = signalLineSeries;
+
+      const histogramSeries = macdChart.addSeries(HistogramSeries, {
+        color: '#26a69a',
+        priceFormat: {
+          type: 'volume',
+        },
+      });
+      histogramSeriesRef.current = histogramSeries;
+
+      // Sync charts
+      chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
+        macdChart?.timeScale().setVisibleRange(range!);
+      });
+    }
+
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+      if (macdContainerRef.current && macdChart) {
+        macdChart.applyOptions({
+          width: macdContainerRef.current.clientWidth,
+          height: macdContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
 
     return () => {
-      resizeObserver.disconnect();
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+      macdChart?.remove();
     };
-  }, [processedData]);
+  }, [showMacd]);
+
+  useEffect(() => {
+    if (!chartRef.current || data.length === 0) return;
+
+    const formattedData: CandlestickData[] = data.map(d => ({
+      time: (d.time / 1000) as Time,
+      open: d.open,
+      high: d.high,
+      low: d.low,
+      close: d.close,
+    }));
+
+    const volumeData = data.map(d => ({
+      time: (d.time / 1000) as Time,
+      value: (d as any).volume || 0,
+      color: d.close >= d.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+    }));
+
+    // Toggle visibility based on chartType
+    if (chartType === 'CANDLE') {
+      candlestickSeriesRef.current?.setData(formattedData);
+      ohlcSeriesRef.current?.setData([]);
+    } else {
+      candlestickSeriesRef.current?.setData([]);
+      ohlcSeriesRef.current?.setData(formattedData);
+    }
+
+    volumeSeriesRef.current?.setData(volumeData);
+
+    // Calculate and set EMA data
+    const closes = data.map(d => d.close);
+    const emaShortValues = calculateEMA(closes, emaShort);
+    const emaLongValues = calculateEMA(closes, emaLong);
+
+    const emaShortData: LineData[] = data.map((d, i) => ({
+      time: (d.time / 1000) as Time,
+      value: emaShortValues[i],
+    }));
+
+    const emaLongData: LineData[] = data.map((d, i) => ({
+      time: (d.time / 1000) as Time,
+      value: emaLongValues[i],
+    }));
+
+    emaShortSeriesRef.current?.setData(emaShortData);
+    emaLongSeriesRef.current?.setData(emaLongData);
+
+    // MACD Data
+    if (showMacd && macdChartRef.current) {
+      const { macdLine, signalLine, histogram } = calculateMACD(closes, macdFast, macdSlow, macdSignal);
+      
+      const macdLineData: LineData[] = data.map((d, i) => ({
+        time: (d.time / 1000) as Time,
+        value: macdLine[i],
+      }));
+
+      const signalLineData: LineData[] = data.map((d, i) => ({
+        time: (d.time / 1000) as Time,
+        value: signalLine[i],
+      }));
+
+      const histogramData = data.map((d, i) => ({
+        time: (d.time / 1000) as Time,
+        value: histogram[i],
+        color: histogram[i] >= 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+      }));
+
+      macdLineSeriesRef.current?.setData(macdLineData);
+      signalLineSeriesRef.current?.setData(signalLineData);
+      histogramSeriesRef.current?.setData(histogramData);
+    }
+
+    chartRef.current.timeScale().fitContent();
+  }, [data, chartType, emaShort, emaLong, showMacd, macdFast, macdSlow, macdSignal]);
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-[200px] relative overflow-hidden">
-      {data.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-white/20 text-xs font-mono">
-          NO DATA AVAILABLE
+    <div className="w-full h-full flex flex-col">
+      <div className="flex items-center gap-2 mb-2 px-2">
+        <button 
+          onClick={() => setChartType('CANDLE')}
+          className={`px-2 py-1 text-[10px] rounded border ${chartType === 'CANDLE' ? 'bg-sky-500/20 border-sky-500 text-sky-400' : 'border-white/10 text-white/40'}`}
+        >
+          Candles
+        </button>
+        <button 
+          onClick={() => setChartType('OHLC')}
+          className={`px-2 py-1 text-[10px] rounded border ${chartType === 'OHLC' ? 'bg-sky-500/20 border-sky-500 text-sky-400' : 'border-white/10 text-white/40'}`}
+        >
+          OHLC
+        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-0.5 bg-[#38bdf8]" />
+            <span className="text-[10px] text-white/40">EMA {emaShort}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-0.5 bg-[#f472b6]" />
+            <span className="text-[10px] text-white/40">EMA {emaLong}</span>
+          </div>
         </div>
+      </div>
+      <div ref={chartContainerRef} className="flex-[3] w-full" />
+      {showMacd && (
+        <div className="w-full h-px bg-white/5 my-2" />
       )}
-      <svg
-        ref={svgRef}
-        className="w-full h-full overflow-visible"
-        style={{ shapeRendering: 'crispEdges' }}
-      />
+      {showMacd && (
+        <div ref={macdContainerRef} className="flex-1 w-full" />
+      )}
     </div>
   );
 };
-

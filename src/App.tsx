@@ -263,12 +263,14 @@ export default function App() {
   const [rsiPeriod, setRsiPeriod] = useState('14');
   const [rsiOverbought, setRsiOverbought] = useState('70');
   const [rsiOversold, setRsiOversold] = useState('30');
-  const [useMacd, setUseMacd] = useState(false);
+  const [useMacdHistogramFilter, setUseMacdHistogramFilter] = useState(false);
+  const [showMacd, setShowMacd] = useState(false);
   const [macdFast, setMacdFast] = useState('12');
   const [macdSlow, setMacdSlow] = useState('26');
   const [macdSignal, setMacdSignal] = useState('9');
   const [currentMacd, setCurrentMacd] = useState({ macdLine: 0, signalLine: 0, histogram: 0 });
   const [chartData, setChartData] = useState<any[]>([]);
+  const [chartInterval, setChartInterval] = useState('1m');
   const [currentPrice, setCurrentPrice] = useState<string>('0.00');
   const [prevPrice, setPrevPrice] = useState<string>('0.00');
   const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS' | 'PRESETS' | 'BACKTEST'>('BASIC');
@@ -283,7 +285,7 @@ export default function App() {
   const [botLogs, setBotLogs] = useState<{ time: number; msg: string; type: 'info' | 'success' | 'error' }[]>([]);
   const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION'>('EMA_CROSS');
   const [botStats, setBotStats] = useState({ trades: 0, wins: 0, losses: 0, totalPnl: 0 });
-  const [tradeConfirm, setTradeConfirm] = useState<{ side: 'BUY' | 'SELL', symbol: string, volume: string, tp: string, sl: string } | null>(null);
+  const [tradeConfirm, setTradeConfirm] = useState<{ side: 'BUY' | 'SELL', symbol: string, volume: string, quantity: string, tp: string, sl: string } | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
 
   // Bot tracking
@@ -313,7 +315,7 @@ export default function App() {
     loadSymbols();
     loadChartData(true);
     fetchPrice();
-  }, [market, selectedSymbol]);
+  }, [market, selectedSymbol, chartInterval]);
 
   useEffect(() => {
     const interval = setInterval(fetchPrice, 1000);
@@ -358,7 +360,7 @@ export default function App() {
     try {
       if (forceClear) setChartData([]); 
       const endpoint = market === 'FUTURES' ? '/api/futures/klines' : '/api/spot/klines';
-      const data = await api(`${endpoint}?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=100`, { auth: false });
+      const data = await api(`${endpoint}?symbol=${encodeURIComponent(selectedSymbol)}&interval=${chartInterval}&limit=100`, { auth: false });
       
       if (!Array.isArray(data)) {
         console.error('Klines data is not an array:', data);
@@ -375,12 +377,13 @@ export default function App() {
         open: Number(k[1]),
         high: Number(k[2]),
         low: Number(k[3]),
-        close: Number(k[4])
+        close: Number(k[4]),
+        volume: Number(k[5])
       }));
       setChartData(formatted);
       
       // Update current indicators for UI
-      if (useMacd) {
+      if (showMacd || useMacdHistogramFilter) {
         const closes = data.map((k: any) => Number(k[4]));
         setCurrentMacd(calculateMACD(closes));
       }
@@ -397,7 +400,7 @@ export default function App() {
       autoTick();
     }
     return () => clearInterval(timer);
-  }, [autoMode, token, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpBuyPct, tpSellPct, slBuyPct, slSellPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacd, macdFast, macdSlow, macdSignal]);
+  }, [autoMode, token, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpBuyPct, tpSellPct, slBuyPct, slSellPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacdHistogramFilter, macdFast, macdSlow, macdSignal]);
 
   const calculateEMA = (data: number[], period: number) => {
     const k = 2 / (period + 1);
@@ -406,6 +409,39 @@ export default function App() {
       ema = data[i] * k + ema * (1 - k);
     }
     return ema;
+  };
+
+  const getSymbolFilters = (symbol: string) => {
+    const s = symbols.find(x => x.symbol === symbol);
+    if (!s || !s.filters) return null;
+    const lot = s.filters.find((f: any) => f.filterType === "LOT_SIZE");
+    return {
+      stepSize: lot ? Number(lot.stepSize) : null,
+      minQty: lot ? Number(lot.minQty) : null
+    };
+  };
+
+  const floorToStep = (qty: number, stepSize: number) => {
+    if (!stepSize || stepSize <= 0) return qty;
+    const inv = 1 / stepSize;
+    return Math.floor(qty * inv) / inv;
+  };
+
+  const decimalsFromStep = (stepSize: number) => {
+    const s = String(stepSize);
+    if (!s.includes(".")) return 0;
+    return s.split(".")[1].replace(/0+$/, "").length;
+  };
+
+  const calculateQuantity = (symbol: string, notional: number, price: number) => {
+    const filters = getSymbolFilters(symbol);
+    let qty = notional / price;
+    if (filters) {
+      if (filters.stepSize) qty = floorToStep(qty, filters.stepSize);
+      if (filters.minQty && qty < filters.minQty) qty = filters.minQty;
+      return qty.toFixed(decimalsFromStep(filters.stepSize || 0.00001));
+    }
+    return qty.toFixed(5);
   };
 
   const calculateRSI = (data: number[], period: number) => {
@@ -693,7 +729,7 @@ export default function App() {
       const closes = klines.map((k: any) => Number(k[4]));
       
       // Update current indicators for UI
-      if (useMacd) {
+      if (showMacd || useMacdHistogramFilter) {
         setCurrentMacd(calculateMACD(closes));
       }
       
@@ -753,7 +789,7 @@ export default function App() {
       }
 
       // MACD Confirmation (Histogram check)
-      if (signal && useMacd) {
+      if (signal && useMacdHistogramFilter) {
         const { histogram } = calculateMACD(closes);
         if (side === 'BUY' && histogram <= 0) signal = false; // Histogram must be positive for BUY
         if (side === 'SELL' && histogram >= 0) signal = false; // Histogram must be negative for SELL
@@ -763,12 +799,15 @@ export default function App() {
         const msg = `${side} signal detected on ${selectedSymbol}`;
         setStatus({ msg: `Auto: ${msg}`, ok: true });
         addLog(msg, 'success');
+        
+        const qty = calculateQuantity(selectedSymbol, Number(tradeVol), Number(currentPrice));
+        
         await api('/api/futures/trade', {
           method: 'POST',
           body: {
             symbol: selectedSymbol,
             side,
-            notional: Number(tradeVol),
+            quantity: qty,
             tpPct: side === 'BUY' ? Number(tpBuyPct) : Number(tpSellPct),
             slPct: side === 'BUY' ? Number(slBuyPct) : Number(slSellPct)
           }
@@ -896,7 +935,7 @@ export default function App() {
           }
 
           // MACD Confirmation (Histogram check)
-          if (signal && useMacd) {
+          if (signal && useMacdHistogramFilter) {
             const { histogram } = calculateMACD(subCloses);
             if (side === 'BUY' && histogram <= 0) signal = false;
             if (side === 'SELL' && histogram >= 0) signal = false;
@@ -935,7 +974,8 @@ export default function App() {
     const sl = side === 'BUY' ? slBuyPct : slSellPct;
     const tp = side === 'BUY' ? tpBuyPct : tpSellPct;
     if (!confirmed) {
-      setTradeConfirm({ side, symbol: selectedSymbol, volume: tradeVol, tp, sl });
+      const qty = calculateQuantity(selectedSymbol, Number(tradeVol), Number(currentPrice));
+      setTradeConfirm({ side, symbol: selectedSymbol, volume: tradeVol, quantity: qty, tp, sl });
       return;
     }
 
@@ -946,7 +986,7 @@ export default function App() {
         body: {
           symbol: selectedSymbol,
           side,
-          notional: Number(tradeVol),
+          quantity: tradeConfirm?.quantity,
           tpPct: Number(tp),
           slPct: Number(sl)
         }
@@ -1493,7 +1533,7 @@ export default function App() {
             </div>
 
             {/* Market View */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 h-96 flex flex-col overflow-hidden">
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 h-[500px] flex flex-col overflow-hidden">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-sky-400" />
@@ -1505,8 +1545,18 @@ export default function App() {
                     }`}>
                       ${Number(currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                     </span>
-                    <span className="text-xs text-white/40 font-normal ml-1">1m Chart</span>
                   </h3>
+                  <div className="flex items-center gap-1 ml-4">
+                    {['1m', '5m', '15m', '1h', '4h', '1d'].map((interval) => (
+                      <button
+                        key={interval}
+                        onClick={() => setChartInterval(interval)}
+                        className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${chartInterval === interval ? 'bg-sky-500 text-black' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
+                      >
+                        {interval}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 text-[10px] mono text-white/40">
                   <span className="flex items-center gap-1">
@@ -1518,7 +1568,9 @@ export default function App() {
                 {chartData.length > 0 ? (
                   <CandlestickChart 
                     data={chartData} 
-                    showMacd={useMacd} 
+                    emaShort={Number(emaShort)}
+                    emaLong={Number(emaLong)}
+                    showMacd={showMacd} 
                     macdFast={Number(macdFast)}
                     macdSlow={Number(macdSlow)}
                     macdSignal={Number(macdSignal)}
@@ -2124,14 +2176,24 @@ export default function App() {
 
                           <div className="flex items-center justify-between">
                             <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" checked={useMacd} onChange={e => setUseMacd(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
+                              <input type="checkbox" checked={showMacd} onChange={e => setShowMacd(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
+                              <span className="text-[10px] font-bold text-white/60">Show MACD Chart</span>
+                              <Tooltip text="Display the MACD indicator pane below the main chart.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={useMacdHistogramFilter} onChange={e => setUseMacdHistogramFilter(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
                               <span className="text-[10px] font-bold text-white/60">MACD Histogram Filter</span>
                               <Tooltip text="Momentum Confirmation: BUY only if Histogram > 0, SELL only if Histogram < 0.">
                                 <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                               </Tooltip>
                             </label>
                           </div>
-                          {useMacd && (
+                          {(showMacd || useMacdHistogramFilter) && (
                             <div className="pl-6 space-y-3">
                               <div className="bg-sky-500/5 border border-sky-500/10 rounded-lg p-2 mb-2">
                                 <p className="text-[9px] text-sky-400/80 leading-relaxed">
@@ -2557,6 +2619,10 @@ export default function App() {
                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                   <p className="text-[10px] text-white/40 uppercase mb-1">Volume</p>
                   <p className="font-bold text-sm">${tradeConfirm.volume} USDT</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Quantity</p>
+                  <p className="font-bold text-sm">{tradeConfirm.quantity}</p>
                 </div>
                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                   <p className="text-[10px] text-white/40 uppercase mb-1">Take Profit</p>
