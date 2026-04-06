@@ -60,7 +60,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const calculateEMA = (values: number[], period: number) => {
     const n = values.length;
     const series: number[] = new Array(n).fill(0);
-    if (n === 0) return series;
+    if (n === 0 || isNaN(period) || period <= 0) return series;
     
     const k = 2 / (period + 1);
     let ema = values[0];
@@ -204,9 +204,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       });
       histogramSeriesRef.current = histogramSeries;
 
-      // Sync charts
+    // Sync charts
       chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
-        macdChart?.timeScale().setVisibleRange(range!);
+        if (range && macdChart) {
+          macdChart.timeScale().setVisibleRange(range);
+        }
       });
     }
 
@@ -231,25 +233,39 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       window.removeEventListener('resize', handleResize);
       chart.remove();
       macdChart?.remove();
+      chartRef.current = null;
+      macdChartRef.current = null;
+      candlestickSeriesRef.current = null;
+      ohlcSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      emaShortSeriesRef.current = null;
+      emaLongSeriesRef.current = null;
+      macdLineSeriesRef.current = null;
+      signalLineSeriesRef.current = null;
+      histogramSeriesRef.current = null;
     };
   }, [showMacd]);
 
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return;
 
-    const formattedData: CandlestickData[] = data.map(d => ({
-      time: (d.time / 1000) as Time,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
+    const formattedData: CandlestickData[] = data
+      .filter(d => d && !isNaN(d.open) && !isNaN(d.high) && !isNaN(d.low) && !isNaN(d.close))
+      .map(d => ({
+        time: (d.time / 1000) as Time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }));
 
-    const volumeData = data.map(d => ({
-      time: (d.time / 1000) as Time,
-      value: (d as any).volume || 0,
-      color: d.close >= d.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-    }));
+    const volumeData = data
+      .filter(d => d && !isNaN(d.time))
+      .map(d => ({
+        time: (d.time / 1000) as Time,
+        value: (d as any).volume || 0,
+        color: d.close >= d.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+      }));
 
     // Toggle visibility based on chartType
     if (chartType === 'CANDLE') {
@@ -305,7 +321,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       histogramSeriesRef.current?.setData(histogramData);
     }
 
-    chartRef.current.timeScale().fitContent();
+    chartRef.current?.timeScale().fitContent();
   }, [data, chartType, emaShort, emaLong, showMacd, macdFast, macdSlow, macdSignal]);
 
   return (

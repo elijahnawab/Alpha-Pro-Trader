@@ -44,7 +44,7 @@ if (!MASTER_KEY) {
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "CHANGE_ME_TOKEN_SECRET";
 
 // Live orders switch
-const ALLOW_LIVE_ORDERS =
+let ALLOW_LIVE_ORDERS =
   String(process.env.ALLOW_LIVE_ORDERS || "true").toLowerCase() === "true";
 
 // Hard trade limits
@@ -66,17 +66,22 @@ if (!fs.existsSync(DB_DIR)) {
 }
 
 function loadDB() {
-  if (!fs.existsSync(DB_PATH)) return { users: [], accounts: [] };
+  const defaultDB = { users: [], accounts: [], settings: { allowLiveOrders: ALLOW_LIVE_ORDERS }, trades: [] };
+  if (!fs.existsSync(DB_PATH)) return defaultDB;
   try {
-    return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+    const db = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+    if (!db.settings) db.settings = defaultDB.settings;
+    if (!db.trades) db.trades = [];
+    return db;
   } catch {
-    return { users: [], accounts: [] };
+    return defaultDB;
   }
 }
 function saveDB(db: any) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 let DB = loadDB();
+ALLOW_LIVE_ORDERS = DB.settings.allowLiveOrders;
 
 // ===== Encryption helpers =====
 const ENC_ALGO = "aes-256-gcm";
@@ -373,6 +378,16 @@ async function startServer() {
       tradeLimits: { min: MIN_TRADE_USD, max: MAX_TRADE_USD },
       spotDollarQuotes: Array.from(SPOT_DOLLAR_QUOTES),
     });
+  });
+
+  app.post("/api/settings/live-orders", authMiddleware, (req: any, res) => {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== "boolean") return res.status(400).json({ error: "boolean_enabled_required" });
+
+    DB.settings.allowLiveOrders = enabled;
+    ALLOW_LIVE_ORDERS = enabled;
+    saveDB(DB);
+    res.json({ ok: true, liveOrders: ALLOW_LIVE_ORDERS });
   });
 
   app.post("/api/auth/register", (req, res) => {
@@ -686,7 +701,7 @@ async function startServer() {
   });
 
   app.post("/api/futures/trade", authMiddleware, async (req: any, res) => {
-    const { symbol, side, notional, quantity, tpPct, slPct } = req.body || {};
+    const { symbol, side, notional, quantity, tpPct, slPct, tpPrice: reqTpPrice, slPrice: reqSlPrice } = req.body || {};
     if (!symbol || !side || (!notional && !quantity)) {
       return res.status(400).json({ error: "symbol_side_notional_or_quantity_required" });
     }
@@ -749,13 +764,35 @@ async function startServer() {
             },
           });
 
-          // 3. TP/SL
-          if (tpPct || slPct) {
+          // 3. TP/SL Validation & Calculation
+          if (tpPct || slPct || reqTpPrice || reqSlPrice) {
             const sideInv = side.toUpperCase() === "BUY" ? "SELL" : "BUY";
-            if (tpPct) {
-              const tpPrice = side.toUpperCase() === "BUY" 
-                ? price * (1 + Number(tpPct) / 100)
-                : price * (1 - Number(tpPct) / 100);
+            const isBuy = side.toUpperCase() === "BUY";
+            
+            let tpPrice: number | null = null;
+            let slPrice: number | null = null;
+
+            if (reqTpPrice) {
+              tpPrice = Number(reqTpPrice);
+              if (isBuy && tpPrice <= price) throw new Error("Take Profit must be above current price for BUY");
+              if (!isBuy && tpPrice >= price) throw new Error("Take Profit must be below current price for SELL");
+            } else if (tpPct) {
+              tpPrice = isBuy ? price * (1 + Number(tpPct) / 100) : price * (1 - Number(tpPct) / 100);
+            }
+
+            if (reqSlPrice) {
+              slPrice = Number(reqSlPrice);
+              if (isBuy && slPrice >= price) throw new Error("Stop Loss must be below current price for BUY");
+              if (!isBuy && slPrice <= price) throw new Error("Stop Loss must be above current price for SELL");
+              
+              const actualSlPct = isBuy ? ((price - slPrice) / price) * 100 : ((slPrice - price) / price) * 100;
+              if (actualSlPct > 20) throw new Error("Stop Loss exceeds 20% risk threshold");
+            } else if (slPct) {
+              if (Number(slPct) > 20) throw new Error("Stop Loss exceeds 20% risk threshold");
+              slPrice = isBuy ? price * (1 - Number(slPct) / 100) : price * (1 + Number(slPct) / 100);
+            }
+
+            if (tpPrice) {
               await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
                 method: "POST",
                 signed: true,
@@ -766,12 +803,11 @@ async function startServer() {
                   stopPrice: tpPrice.toFixed(2),
                   closePosition: "true",
                 },
-              }).catch(() => {});
+              }).catch((err) => {
+                console.error("TP Order Failed:", err.message);
+              });
             }
-            if (slPct) {
-              const slPrice = side.toUpperCase() === "BUY"
-                ? price * (1 - Number(slPct) / 100)
-                : price * (1 + Number(slPct) / 100);
+            if (slPrice) {
               await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
                 method: "POST",
                 signed: true,
@@ -782,7 +818,9 @@ async function startServer() {
                   stopPrice: slPrice.toFixed(2),
                   closePosition: "true",
                 },
-              }).catch(() => {});
+              }).catch((err) => {
+                console.error("SL Order Failed:", err.message);
+              });
             }
           }
 
@@ -858,6 +896,27 @@ async function startServer() {
     } catch (e: any) {
       res.status(500).json({ error: "fetch_trades_failed", details: e?.binance || e?.message || String(e) });
     }
+  });
+
+  app.get("/api/user/trades", authMiddleware, async (req: any, res) => {
+    const trades = DB.trades.filter((t: any) => t.uid === req.user.uid);
+    res.json(trades.sort((a: any, b: any) => b.time - a.time));
+  });
+
+  app.post("/api/user/trades/record", authMiddleware, async (req: any, res) => {
+    const { trade } = req.body;
+    if (!trade) return res.status(400).json({ error: "trade_data_required" });
+
+    const newTrade = {
+      ...trade,
+      id: crypto.randomUUID(),
+      uid: req.user.uid,
+      time: Date.now()
+    };
+
+    DB.trades.push(newTrade);
+    saveDB(DB);
+    res.json({ ok: true, trade: newTrade });
   });
 
   // Vite middleware
