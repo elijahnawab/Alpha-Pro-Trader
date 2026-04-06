@@ -325,6 +325,7 @@ export default function App() {
   }, [selectedSymbol, market]);
 
   const fetchOrderBook = async () => {
+    if (!selectedSymbol) return;
     try {
       const path = market === 'FUTURES' ? `/api/futures/depth?symbol=${selectedSymbol}&limit=10` : `/api/spot/depth?symbol=${selectedSymbol}&limit=10`;
       const data = await api(path, { auth: false });
@@ -339,7 +340,8 @@ export default function App() {
   const fetchPrice = async () => {
     if (!selectedSymbol) return;
     try {
-      const data = await api(`/api/futures/price?symbol=${encodeURIComponent(selectedSymbol)}`, { auth: false });
+      const endpoint = market === 'FUTURES' ? '/api/futures/price' : '/api/spot/price';
+      const data = await api(`${endpoint}?symbol=${encodeURIComponent(selectedSymbol)}`, { auth: false });
       if (data.price) {
         setCurrentPrice(prev => {
           if (prev !== data.price) setPrevPrice(prev);
@@ -355,10 +357,19 @@ export default function App() {
     if (!selectedSymbol) return;
     try {
       if (forceClear) setChartData([]); 
-      const data = await api(`/api/futures/klines?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=100`, { auth: false });
+      const endpoint = market === 'FUTURES' ? '/api/futures/klines' : '/api/spot/klines';
+      const data = await api(`${endpoint}?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=100`, { auth: false });
+      
       if (!Array.isArray(data)) {
-        throw new Error('Invalid klines data format');
+        console.error('Klines data is not an array:', data);
+        throw new Error(`Invalid klines data format: expected array, got ${typeof data}`);
       }
+      
+      if (data.length > 0 && !Array.isArray(data[0])) {
+        console.error('Klines data elements are not arrays:', data[0]);
+        throw new Error('Invalid klines data format: elements are not arrays');
+      }
+
       const formatted = data.map((k: any) => ({
         time: k[0],
         open: Number(k[1]),
@@ -367,6 +378,12 @@ export default function App() {
         close: Number(k[4])
       }));
       setChartData(formatted);
+      
+      // Update current indicators for UI
+      if (useMacd) {
+        const closes = data.map((k: any) => Number(k[4]));
+        setCurrentMacd(calculateMACD(closes));
+      }
     } catch (err: any) {
       console.error('Chart load failed:', err);
       setStatus({ msg: `Chart Error: ${err.message}`, ok: false });
@@ -878,6 +895,13 @@ export default function App() {
             }
           }
 
+          // MACD Confirmation (Histogram check)
+          if (signal && useMacd) {
+            const { histogram } = calculateMACD(subCloses);
+            if (side === 'BUY' && histogram <= 0) signal = false;
+            if (side === 'SELL' && histogram >= 0) signal = false;
+          }
+
           if (signal) {
             currentPos = {
               side,
@@ -973,6 +997,7 @@ export default function App() {
           data = await res.json();
         } else {
           const text = await res.text();
+          console.warn(`Non-JSON response from ${path}:`, text.substring(0, 500));
           data = { message: text || 'Non-JSON response' };
         }
 
@@ -2101,13 +2126,18 @@ export default function App() {
                             <label className="flex items-center gap-2 cursor-pointer">
                               <input type="checkbox" checked={useMacd} onChange={e => setUseMacd(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
                               <span className="text-[10px] font-bold text-white/60">MACD Histogram Filter</span>
-                              <Tooltip text="Ensures the MACD Histogram is positive for BUYs and negative for SELLs to confirm momentum.">
+                              <Tooltip text="Momentum Confirmation: BUY only if Histogram > 0, SELL only if Histogram < 0.">
                                 <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                               </Tooltip>
                             </label>
                           </div>
                           {useMacd && (
                             <div className="pl-6 space-y-3">
+                              <div className="bg-sky-500/5 border border-sky-500/10 rounded-lg p-2 mb-2">
+                                <p className="text-[9px] text-sky-400/80 leading-relaxed">
+                                  <span className="font-bold">Signal Rule:</span> BUY requires positive histogram (bullish momentum). SELL requires negative histogram (bearish momentum).
+                                </p>
+                              </div>
                               <div className="grid grid-cols-3 gap-2">
                                 <div>
                                   <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
@@ -2147,8 +2177,8 @@ export default function App() {
                                   <p className="text-[9px] font-mono font-bold text-amber-400">{currentMacd.signalLine.toFixed(4)}</p>
                                 </div>
                                 <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
-                                  <p className="text-[7px] text-white/30 uppercase">Hist</p>
-                                  <p className={`text-[9px] font-mono font-bold ${currentMacd.histogram >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  <p className="text-[7px] text-white/30 uppercase">Histogram</p>
+                                  <p className={`text-[9px] font-mono font-bold ${currentMacd.histogram > 0 ? 'text-emerald-400' : currentMacd.histogram < 0 ? 'text-rose-400' : 'text-white/40'}`}>
                                     {currentMacd.histogram.toFixed(4)}
                                   </p>
                                 </div>

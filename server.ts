@@ -315,7 +315,8 @@ async function pubFetch(base: string, pathname: string, query = {}, timeout = 10
     let json;
     try {
       json = JSON.parse(text);
-    } catch {
+    } catch (parseErr) {
+      console.error(`Failed to parse JSON from ${url.toString()}. Raw text:`, text.substring(0, 500));
       json = { raw: text };
     }
     if (!res.ok) {
@@ -596,6 +597,32 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error in /api/user/summary:", err);
       res.status(500).json({ error: "summary_failed", details: err.message });
+    }
+  });
+
+  app.get("/api/spot/klines", async (req, res) => {
+    const { symbol, interval, limit } = req.query || {};
+    if (!symbol) {
+      return res.status(400).json({ error: "missing_symbol" });
+    }
+    try {
+      const data = await pubFetch(SPOT_BASE, "/api/v3/klines", { symbol, interval, limit });
+      res.json(data);
+    } catch (e: any) {
+      console.error(`Spot Klines API failure for ${symbol}:`, e.message);
+      res.status(500).json({ error: "klines_failed", message: e.message });
+    }
+  });
+
+  app.get("/api/spot/price", async (req, res) => {
+    const { symbol } = req.query || {};
+    if (!symbol) return res.status(400).json({ error: "symbol_required" });
+    
+    try {
+      const data = await pubFetch(SPOT_BASE, "/api/v3/ticker/price", { symbol });
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: "price_failed", message: e.message });
     }
   });
 
