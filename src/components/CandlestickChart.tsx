@@ -17,9 +17,18 @@ interface CandleData {
 interface CandlestickChartProps {
   data: CandleData[];
   showMacd?: boolean;
+  macdFast?: number;
+  macdSlow?: number;
+  macdSignal?: number;
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, showMacd = true }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ 
+  data, 
+  showMacd = true,
+  macdFast = 12,
+  macdSlow = 26,
+  macdSignal = 9
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -49,15 +58,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, showMa
     const closes = new Float64Array(n);
     for (let i = 0; i < n; i++) closes[i] = data[i].close;
 
-    const ema12 = calculateEMA(closes, 12);
-    const ema26 = calculateEMA(closes, 26);
+    const emaFast = calculateEMA(closes, macdFast);
+    const emaSlow = calculateEMA(closes, macdSlow);
     
     const macdLines = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      macdLines[i] = ema12[i] - ema26[i];
+      macdLines[i] = emaFast[i] - emaSlow[i];
     }
     
-    const signalLines = calculateEMA(macdLines, 9);
+    const signalLines = calculateEMA(macdLines, macdSignal);
     
     // 2. Downsample using OHLC aggregation if data is too large
     const maxPoints = 300;
@@ -281,9 +290,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, showMa
         macdG.append('path')
           .datum(processedData)
           .attr('fill', 'none')
-          .attr('stroke', '#fbbf24') // Amber 400 (Visually distinct)
-          .attr('stroke-width', 1.5)
-          .attr('stroke-dasharray', '2,1')
+          .attr('stroke', '#fbbf24') // Amber 400
+          .attr('stroke-width', 2) // Slightly thicker
+          .attr('stroke-dasharray', '4,2') // More distinct dash pattern
           .attr('d', signalLineGen);
           
         // MACD Zero Line

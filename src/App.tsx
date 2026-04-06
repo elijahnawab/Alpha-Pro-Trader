@@ -13,13 +13,17 @@ import {
   Bot,
   ShieldCheck,
   AlertCircle,
-  Info
+  AlertTriangle,
+  Info,
+  BarChart2,
+  Search,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { CandlestickChart } from './components/CandlestickChart';
 
-const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }) => {
+const Tooltip = ({ text, children }: { text: string; children: React.ReactNode; key?: React.Key }) => {
   const [show, setShow] = useState(false);
   return (
     <div className="relative inline-block group" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
@@ -44,6 +48,7 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }
 interface Account {
   id: string;
   label: string;
+  group?: string;
   enabled: boolean;
   futures?: {
     walletBalance: number;
@@ -69,6 +74,166 @@ interface Account {
   errSpot?: string;
 }
 
+const PRESETS_DATA = [
+  {
+    name: 'Aggressive Scalp',
+    desc: 'High frequency trading with tight stops and aggressive trailing.',
+    params: {
+      emaShort: '5',
+      emaLong: '13',
+      tpBuyPct: '1.5',
+      tpSellPct: '1.5',
+      slPct: '0.5',
+      maxDuration: '5',
+      trailingStop: '10',
+      profitFloor: '0.5',
+      strategy: 'EMA_CROSS' as const
+    }
+  },
+  {
+    name: 'Conservative Trend',
+    desc: 'Follows major trends with wider stops and longer duration.',
+    params: {
+      emaShort: '20',
+      emaLong: '50',
+      tpBuyPct: '3.0',
+      tpSellPct: '3.0',
+      slPct: '1.5',
+      maxDuration: '60',
+      trailingStop: '20',
+      profitFloor: '1.0',
+      strategy: 'EMA_CROSS' as const
+    }
+  },
+  {
+    name: 'RSI Reversion',
+    desc: 'Trades overbought/oversold conditions for quick reversals.',
+    params: {
+      strategy: 'RSI_REVERSION' as const,
+      rsiPeriod: '14',
+      rsiOversold: '30',
+      rsiOverbought: '70',
+      tpBuyPct: '1.0',
+      tpSellPct: '1.0',
+      slPct: '0.5',
+      maxDuration: '15',
+      trailingStop: '0',
+      profitFloor: '0'
+    }
+  },
+  {
+    name: 'Balanced Scalp',
+    desc: 'A middle-ground approach for consistent performance.',
+    params: {
+      emaShort: '10',
+      emaLong: '20',
+      tpBuyPct: '2.0',
+      tpSellPct: '2.0',
+      slPct: '1.0',
+      maxDuration: '30',
+      trailingStop: '15',
+      profitFloor: '0.5',
+      strategy: 'EMA_CROSS' as const
+    }
+  }
+];
+
+const SymbolSelector = ({ 
+  selectedSymbol, 
+  setSelectedSymbol, 
+  symbols, 
+  symbolSearch, 
+  setSymbolSearch, 
+  isSymbolListOpen, 
+  setIsSymbolListOpen 
+}: { 
+  selectedSymbol: string; 
+  setSelectedSymbol: (s: string) => void; 
+  symbols: any[]; 
+  symbolSearch: string; 
+  setSymbolSearch: (s: string) => void; 
+  isSymbolListOpen: boolean; 
+  setIsSymbolListOpen: (b: boolean) => void; 
+}) => {
+  const filteredSymbols = symbols.filter(s => {
+    const search = symbolSearch.toLowerCase();
+    return (
+      s.symbol.toLowerCase().includes(search) ||
+      (s.baseAsset && s.baseAsset.toLowerCase().includes(search)) ||
+      (s.quoteAsset && s.quoteAsset.toLowerCase().includes(search))
+    );
+  });
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <input 
+          type="text" 
+          placeholder="Search symbol..."
+          value={isSymbolListOpen ? symbolSearch : selectedSymbol}
+          onFocus={() => setIsSymbolListOpen(true)}
+          onChange={(e) => {
+            setSymbolSearch(e.target.value);
+            setIsSymbolListOpen(true);
+          }}
+          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors pr-10"
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-white/20 pointer-events-none">
+          <Search className="w-3.5 h-3.5" />
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSymbolListOpen ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {isSymbolListOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute z-50 w-full mt-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-[240px] flex flex-col"
+          >
+            <div className="overflow-y-auto custom-scrollbar">
+              {filteredSymbols.length > 0 ? (
+                filteredSymbols.map((s) => (
+                  <button
+                    key={s.symbol}
+                    onClick={() => {
+                      setSelectedSymbol(s.symbol);
+                      setSymbolSearch('');
+                      setIsSymbolListOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors flex items-center justify-between ${selectedSymbol === s.symbol ? 'bg-sky-500/10 text-sky-400' : 'text-white/60'}`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-bold">{s.symbol}</span>
+                      <span className="text-[10px] opacity-40 uppercase tracking-tighter">
+                        {s.baseAsset} / {s.quoteAsset}
+                      </span>
+                    </div>
+                    {s.price && <span className="text-[10px] opacity-40 font-mono">${Number(s.price).toLocaleString()}</span>}
+                  </button>
+                ))
+              ) : (
+                <div className="px-4 py-3 text-xs text-white/20 text-center italic">No symbols found</div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {isSymbolListOpen && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => {
+            setIsSymbolListOpen(false);
+            setSymbolSearch('');
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('alpha_token') || '');
   const [username, setUsername] = useState('');
@@ -78,8 +243,13 @@ export default function App() {
   const [symbols, setSymbols] = useState<any[]>([]);
   const [market, setMarket] = useState('FUTURES');
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
-  const [tpPct, setTpPct] = useState('1.0');
+  const [symbolSearch, setSymbolSearch] = useState('');
+  const [isSymbolListOpen, setIsSymbolListOpen] = useState(false);
+  const [tpBuyPct, setTpBuyPct] = useState('1.0');
+  const [tpSellPct, setTpSellPct] = useState('1.0');
   const [slPct, setSlPct] = useState('0.5');
+  const [slBuyPct, setSlBuyPct] = useState('0.5');
+  const [slSellPct, setSlSellPct] = useState('0.5');
   const [autoMode, setAutoMode] = useState(false);
   const [emaShort, setEmaShort] = useState('5');
   const [emaLong, setEmaLong] = useState('13');
@@ -87,6 +257,7 @@ export default function App() {
   const [crossCond, setCrossCond] = useState<'UP' | 'DOWN'>('UP');
   const [maxDuration, setMaxDuration] = useState('1');
   const [trailingStop, setTrailingStop] = useState('5');
+  const [profitFloorPct, setProfitFloorPct] = useState('0.5');
   const [useRsi, setUseRsi] = useState(false);
   const [useRsiDivergence, setUseRsiDivergence] = useState(false);
   const [rsiPeriod, setRsiPeriod] = useState('14');
@@ -100,7 +271,11 @@ export default function App() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [currentPrice, setCurrentPrice] = useState<string>('0.00');
   const [prevPrice, setPrevPrice] = useState<string>('0.00');
-  const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS'>('BASIC');
+  const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS' | 'PRESETS' | 'BACKTEST'>('BASIC');
+  const [backtestResults, setBacktestResults] = useState<{ trades: any[]; stats: any } | null>(null);
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [backtestDays, setBacktestDays] = useState('7');
+  const [orderBook, setOrderBook] = useState<{ bids: [string, string][], asks: [string, string][] }>({ bids: [], asks: [] });
   const [status, setStatus] = useState({ msg: 'Ready', ok: true });
   const [loading, setLoading] = useState(false);
   const [liveOrders, setLiveOrders] = useState(false);
@@ -108,6 +283,8 @@ export default function App() {
   const [botLogs, setBotLogs] = useState<{ time: number; msg: string; type: 'info' | 'success' | 'error' }[]>([]);
   const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION'>('EMA_CROSS');
   const [botStats, setBotStats] = useState({ trades: 0, wins: 0, losses: 0, totalPnl: 0 });
+  const [tradeConfirm, setTradeConfirm] = useState<{ side: 'BUY' | 'SELL', symbol: string, volume: string, tp: string, sl: string } | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
 
   // Bot tracking
   const peakProfitRef = React.useRef<Record<string, number>>({});
@@ -115,13 +292,19 @@ export default function App() {
 
   // Account form
   const [newAccLabel, setNewAccLabel] = useState('');
+  const [newAccGroup, setNewAccGroup] = useState('');
   const [newAccKey, setNewAccKey] = useState('');
   const [newAccSecret, setNewAccSecret] = useState('');
+
+  // Edit Account state
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editAccLabel, setEditAccLabel] = useState('');
+  const [editAccGroup, setEditAccGroup] = useState('');
 
   useEffect(() => {
     if (token) {
       refreshAll();
-      const interval = setInterval(() => refreshAll(true), 5000);
+      const interval = setInterval(() => refreshAll(true), 2000);
       return () => clearInterval(interval);
     }
   }, [token]);
@@ -134,8 +317,24 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(fetchPrice, 1000);
-    return () => clearInterval(interval);
-  }, [selectedSymbol]);
+    const obInterval = setInterval(fetchOrderBook, 2000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(obInterval);
+    };
+  }, [selectedSymbol, market]);
+
+  const fetchOrderBook = async () => {
+    try {
+      const path = market === 'FUTURES' ? `/api/futures/depth?symbol=${selectedSymbol}&limit=10` : `/api/spot/depth?symbol=${selectedSymbol}&limit=10`;
+      const data = await api(path, { auth: false });
+      if (data.bids && data.asks) {
+        setOrderBook({ bids: data.bids, asks: data.asks });
+      }
+    } catch (err) {
+      console.error('Order book fetch error:', err);
+    }
+  };
 
   const fetchPrice = async () => {
     if (!selectedSymbol) return;
@@ -181,7 +380,7 @@ export default function App() {
       autoTick();
     }
     return () => clearInterval(timer);
-  }, [autoMode, token, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpPct, slPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacd, macdFast, macdSlow, macdSignal]);
+  }, [autoMode, token, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpBuyPct, tpSellPct, slBuyPct, slSellPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacd, macdFast, macdSlow, macdSignal]);
 
   const calculateEMA = (data: number[], period: number) => {
     const k = 2 / (period + 1);
@@ -327,21 +526,23 @@ export default function App() {
           currentPosKeys.add(key);
           symbolsWithPositions.add(p.symbol);
           
-          // Track peak profit
+          // Track peak profit (USDT)
           const currentProfit = p.unrealizedProfit;
           const peak = peakProfitRef.current[key] || 0;
           
-          // Only track peak if profit is positive
+          // Only track peak if profit is positive and greater than previous peak
           if (currentProfit > peak && currentProfit > 0) {
             peakProfitRef.current[key] = currentProfit;
           }
 
-          // Trailing Stop Logic
+          // Trailing Stop Logic: Trigger if profit drops by X% from its peak
           const tStop = Number(trailingStop);
           if (peak > 0 && tStop > 0) {
-            const threshold = peak * (1 - tStop / 100);
+            const dropAmount = peak * (tStop / 100);
+            const threshold = peak - dropAmount;
+            
             if (currentProfit < threshold) {
-              const msg = `Trailing stop triggered for ${p.symbol} on ${acc.label} (Peak: $${peak.toFixed(2)}, Current: $${currentProfit.toFixed(2)})`;
+              const msg = `Trailing stop triggered for ${p.symbol} on ${acc.label} (Peak: $${peak.toFixed(2)}, Current: $${currentProfit.toFixed(2)}, Drop: ${tStop}%)`;
               setStatus({ msg: `Auto: ${msg}`, ok: true });
               addLog(msg, 'success');
               setBotStats(prev => ({
@@ -358,9 +559,32 @@ export default function App() {
             }
           }
 
+          // Profit Floor Logic: Trigger if profit drops below X% of initial trade value
+          // This acts as a "Minimum Profit Lock" or "Breakeven Plus"
+          const pFloor = Number(profitFloorPct);
+          const initialValue = Math.abs(p.amount) * p.entryPrice;
+          const floorThresholdUSDT = initialValue * (pFloor / 100);
+          
+          if (pFloor > 0 && peak > floorThresholdUSDT && currentProfit < floorThresholdUSDT) {
+            const msg = `Profit floor triggered for ${p.symbol} on ${acc.label} (Floor: ${pFloor}%, Current: ${p.pnlPct.toFixed(2)}%)`;
+            setStatus({ msg: `Auto: ${msg}`, ok: true });
+            addLog(msg, 'success');
+            setBotStats(prev => ({
+              ...prev,
+              trades: prev.trades + 1,
+              wins: currentProfit > 0 ? prev.wins + 1 : prev.wins,
+              losses: currentProfit <= 0 ? prev.losses + 1 : prev.losses,
+              totalPnl: prev.totalPnl + currentProfit
+            }));
+            await api('/api/futures/close', { method: 'POST', body: { accountId: acc.id, symbol: p.symbol } });
+            delete peakProfitRef.current[key];
+            delete posStartTimeRef.current[key];
+            continue;
+          }
+
           // Manual TP/SL Fallback Monitoring
-          const tp = Number(tpPct);
-          const sl = Number(slPct);
+          const tp = p.amount > 0 ? Number(tpBuyPct) : Number(tpSellPct);
+          const sl = p.amount > 0 ? Number(slBuyPct) : Number(slSellPct);
           const pnl = p.pnlPct; // Percentage PnL
 
           if (tp > 0 && pnl >= tp) {
@@ -528,8 +752,8 @@ export default function App() {
             symbol: selectedSymbol,
             side,
             notional: Number(tradeVol),
-            tpPct: Number(tpPct),
-            slPct: Number(slPct)
+            tpPct: side === 'BUY' ? Number(tpBuyPct) : Number(tpSellPct),
+            slPct: side === 'BUY' ? Number(slBuyPct) : Number(slSellPct)
           }
         });
       }
@@ -539,7 +763,158 @@ export default function App() {
     }
   };
 
-  const executeTrade = async (side: 'BUY' | 'SELL') => {
+  const runBacktest = async () => {
+    setBacktestLoading(true);
+    setBacktestResults(null);
+    try {
+      const limit = Number(backtestDays) * 24 * 60; // 1m candles
+      const klines = await api(`/api/futures/klines?symbol=${selectedSymbol}&interval=1m&limit=${Math.min(limit, 1500)}`, { auth: false });
+      
+      const closes = klines.map((k: any) => Number(k[4]));
+      const times = klines.map((k: any) => Number(k[0]));
+      
+      const trades: any[] = [];
+      let currentPos: { side: 'BUY' | 'SELL'; entryPrice: number; entryTime: number; peakProfit: number } | null = null;
+      let totalPnl = 0;
+      let wins = 0;
+      let losses = 0;
+
+      const shortP = Number(emaShort);
+      const longP = Number(emaLong);
+      const tpBuy = Number(tpBuyPct);
+      const tpSell = Number(tpSellPct);
+      const slBuy = Number(slBuyPct);
+      const slSell = Number(slSellPct);
+      const tStop = Number(trailingStop);
+      const pFloor = Number(profitFloorPct);
+      const maxMin = Number(maxDuration);
+
+      // Start from index 100 to have enough data for indicators
+      for (let i = 100; i < closes.length; i++) {
+        const subCloses = closes.slice(0, i + 1);
+        const currentPrice = closes[i];
+        const currentTime = times[i];
+
+        if (currentPos) {
+          // Manage position
+          const pnlPct = currentPos.side === 'BUY' 
+            ? ((currentPrice - currentPos.entryPrice) / currentPos.entryPrice) * 100
+            : ((currentPos.entryPrice - currentPrice) / currentPos.entryPrice) * 100;
+          
+          const currentProfit = (pnlPct / 100) * Number(tradeVol);
+          if (currentProfit > currentPos.peakProfit && currentProfit > 0) {
+            currentPos.peakProfit = currentProfit;
+          }
+
+          let closeReason = '';
+
+          // TP/SL
+          const sl = currentPos.side === 'BUY' ? slBuy : slSell;
+          const tp = currentPos.side === 'BUY' ? tpBuy : tpSell;
+          if (tp > 0 && pnlPct >= tp) closeReason = 'Take Profit';
+          else if (sl > 0 && pnlPct <= -sl) closeReason = 'Stop Loss';
+          
+          // Trailing Stop
+          if (!closeReason && currentPos.peakProfit > 0 && tStop > 0) {
+            const threshold = currentPos.peakProfit - (currentPos.peakProfit * (tStop / 100));
+            if (currentProfit < threshold) closeReason = 'Trailing Stop';
+          }
+
+          // Profit Floor
+          if (!closeReason && pFloor > 0) {
+            const floorThreshold = Number(tradeVol) * (pFloor / 100);
+            if (currentPos.peakProfit > floorThreshold && currentProfit < floorThreshold) {
+              closeReason = 'Profit Floor';
+            }
+          }
+
+          // Max Duration
+          if (!closeReason && maxMin > 0) {
+            const elapsed = (currentTime - currentPos.entryTime) / 60000;
+            if (elapsed > maxMin) closeReason = 'Max Duration';
+          }
+
+          if (closeReason) {
+            trades.push({
+              ...currentPos,
+              exitPrice: currentPrice,
+              exitTime: currentTime,
+              pnl: currentProfit,
+              pnlPct,
+              reason: closeReason
+            });
+            totalPnl += currentProfit;
+            if (currentProfit > 0) wins++;
+            else losses++;
+            currentPos = null;
+          }
+        } else {
+          // Entry logic
+          let signal = false;
+          let side: 'BUY' | 'SELL' = 'BUY';
+
+          if (strategy === 'EMA_CROSS') {
+            const eShort = calculateEMA(subCloses, shortP);
+            const eLong = calculateEMA(subCloses, longP);
+            const prevCloses = subCloses.slice(0, -1);
+            const prevShort = calculateEMA(prevCloses, shortP);
+            const prevLong = calculateEMA(prevCloses, longP);
+
+            if (crossCond === 'UP') {
+              if (prevShort <= prevLong && eShort > eLong) signal = true;
+              side = 'BUY';
+            } else {
+              if (prevShort >= prevLong && eShort < eLong) signal = true;
+              side = 'SELL';
+            }
+          } else if (strategy === 'RSI_REVERSION') {
+            const rsiVal = calculateRSI(subCloses, Number(rsiPeriod));
+            if (rsiVal < Number(rsiOversold)) {
+              signal = true;
+              side = 'BUY';
+            } else if (rsiVal > Number(rsiOverbought)) {
+              signal = true;
+              side = 'SELL';
+            }
+          }
+
+          if (signal) {
+            currentPos = {
+              side,
+              entryPrice: currentPrice,
+              entryTime: currentTime,
+              peakProfit: 0
+            };
+          }
+        }
+      }
+
+      setBacktestResults({
+        trades,
+        stats: {
+          totalTrades: trades.length,
+          wins,
+          losses,
+          winRate: trades.length > 0 ? (wins / trades.length) * 100 : 0,
+          totalPnl,
+          avgPnl: trades.length > 0 ? totalPnl / trades.length : 0
+        }
+      });
+    } catch (err: any) {
+      setStatus({ msg: `Backtest Error: ${err.message}`, ok: false });
+    } finally {
+      setBacktestLoading(false);
+    }
+  };
+
+  const executeTrade = async (side: 'BUY' | 'SELL', confirmed = false) => {
+    const sl = side === 'BUY' ? slBuyPct : slSellPct;
+    const tp = side === 'BUY' ? tpBuyPct : tpSellPct;
+    if (!confirmed) {
+      setTradeConfirm({ side, symbol: selectedSymbol, volume: tradeVol, tp, sl });
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api('/api/futures/trade', {
@@ -548,13 +923,14 @@ export default function App() {
           symbol: selectedSymbol,
           side,
           notional: Number(tradeVol),
-          tpPct: Number(tpPct),
-          slPct: Number(slPct)
+          tpPct: Number(tp),
+          slPct: Number(sl)
         }
       });
       if (res.msg) setStatus({ msg: res.msg, ok: true });
       else setStatus({ msg: `${side} order placed`, ok: true });
       refreshAll();
+      setTradeConfirm(null);
     } catch (err: any) {
       setStatus({ msg: err.message, ok: false });
     } finally {
@@ -579,39 +955,51 @@ export default function App() {
     const headers: any = { 'Content-Type': 'application/json' };
     if (auth && token) headers['Authorization'] = `Bearer ${token}`;
 
-    const url = path.startsWith('http') ? path : `${window.location.origin}${path}`;
+    const url = path;
+    const maxRetries = 2;
+    let attempt = 0;
 
-    try {
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : null,
-      });
+    while (attempt <= maxRetries) {
+      try {
+        const res = await fetch(url, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : null,
+        });
 
-      let data;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        data = { message: text || 'Non-JSON response' };
-      }
+        let data;
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          data = { message: text || 'Non-JSON response' };
+        }
 
-      if (!res.ok) {
-        throw new Error(data.error || data.message || `API Error: ${res.status}`);
+        if (!res.ok) {
+          throw new Error(data.error || data.message || `API Error: ${res.status}`);
+        }
+        return data;
+      } catch (err: any) {
+        attempt++;
+        const isNetworkError = err.name === 'TypeError' || err.message.includes('Failed to fetch') || err.message.includes('NetworkError');
+        
+        if (attempt > maxRetries || !isNetworkError) {
+          console.error('API Fetch Error Details:', {
+            path,
+            url,
+            name: err.name,
+            message: err.message,
+            attempt
+          });
+          if (isNetworkError) {
+            console.error('Network error or server unreachable:', path);
+          }
+          throw err;
+        }
+        // Wait before retry
+        await new Promise(r => setTimeout(r, 1000 * attempt));
       }
-      return data;
-    } catch (err: any) {
-      console.error('API Fetch Error Details:', {
-        path,
-        name: err.name,
-        message: err.message,
-        stack: err.stack
-      });
-      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-        console.error('Network error or server unreachable:', path);
-      }
-      throw err;
     }
   };
 
@@ -646,6 +1034,7 @@ export default function App() {
       setUsername(data.user.username);
       setLiveOrders(data.liveOrders);
       if (data.tradeLimits) setTradeLimits(data.tradeLimits);
+      setLastUpdated(Date.now());
       setStatus({ msg: 'Data refreshed', ok: true });
       loadChartData(false);
     } catch (err: any) {
@@ -673,9 +1062,10 @@ export default function App() {
     try {
       await api('/api/accounts', {
         method: 'POST',
-        body: { label: newAccLabel, apiKey: newAccKey, apiSecret: newAccSecret }
+        body: { label: newAccLabel, group: newAccGroup, apiKey: newAccKey, apiSecret: newAccSecret }
       });
       setNewAccLabel('');
+      setNewAccGroup('');
       setNewAccKey('');
       setNewAccSecret('');
       refreshAll();
@@ -694,11 +1084,44 @@ export default function App() {
     }
   };
 
+  const toggleGroup = async (groupName: string, enabled: boolean) => {
+    const groupAccounts = accounts.filter(acc => (acc.group || 'Ungrouped') === groupName);
+    try {
+      await Promise.all(groupAccounts.map(acc => 
+        api(`/api/accounts/${acc.id}/toggle`, { 
+          method: 'POST',
+          body: { enabled } // Assuming the backend supports setting the state, otherwise we just toggle
+        })
+      ));
+      refreshAll();
+      setStatus({ msg: `Group ${groupName} ${enabled ? 'enabled' : 'disabled'}`, ok: true });
+    } catch (err: any) {
+      setStatus({ msg: err.message, ok: false });
+    }
+  };
+
   const deleteAccount = async (id: string) => {
     if (!confirm('Delete this account?')) return;
     try {
       await api(`/api/accounts/${id}`, { method: 'DELETE' });
       refreshAll();
+    } catch (err: any) {
+      setStatus({ msg: err.message, ok: false });
+    }
+  };
+
+  const handleUpdateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+    try {
+      await api(`/api/accounts/${editingAccount.id}`, { 
+        method: 'PATCH',
+        body: { label: editAccLabel, group: editAccGroup }
+      });
+      refreshAll();
+      setEditingAccount(null);
+      (document.getElementById('edit-account-modal') as HTMLDialogElement)?.close();
+      setStatus({ msg: 'Account updated', ok: true });
     } catch (err: any) {
       setStatus({ msg: err.message, ok: false });
     }
@@ -842,8 +1265,42 @@ export default function App() {
           {/* Left Column: Accounts & Balances */}
           <div className="lg:col-span-8 space-y-6">
             {/* Balances Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {accounts.map((acc) => (
+            <div className="space-y-8">
+              {(Object.entries(
+                accounts.reduce((groups: Record<string, Account[]>, acc) => {
+                  const group = acc.group || 'Ungrouped';
+                  if (!groups[group]) groups[group] = [];
+                  groups[group].push(acc);
+                  return groups;
+                }, {})
+              ) as [string, Account[]][]).map(([groupName, groupAccs]) => (
+                <div key={groupName} className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <LayoutDashboard className="w-4 h-4 text-sky-400" />
+                      <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">{groupName}</h2>
+                      <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full text-white/40">{groupAccs.length}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => toggleGroup(groupName, true)}
+                        className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-wider flex items-center gap-1"
+                      >
+                        <Play className="w-3 h-3" />
+                        Enable All
+                      </button>
+                      <button 
+                        onClick={() => toggleGroup(groupName, false)}
+                        className="text-[10px] font-bold text-red-400 hover:text-red-300 transition-colors uppercase tracking-wider flex items-center gap-1"
+                      >
+                        <Square className="w-3 h-3" />
+                        Disable All
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {groupAccs.map((acc) => (
                 <motion.div 
                   layout
                   key={acc.id}
@@ -852,7 +1309,12 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${acc.enabled ? 'bg-emerald-500' : 'bg-white/20'}`} />
-                      <h3 className="font-bold">{acc.label}</h3>
+                      <div>
+                        <h3 className="font-bold text-sm">{acc.label}</h3>
+                        <p className="text-[8px] text-white/30 uppercase tracking-wider font-mono">
+                          Updated {new Date(lastUpdated).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <button 
@@ -860,6 +1322,18 @@ export default function App() {
                         className={`text-xs px-2 py-1 rounded-md transition-colors ${acc.enabled ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-white/40'}`}
                       >
                         {acc.enabled ? 'Enabled' : 'Disabled'}
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setEditingAccount(acc);
+                          setEditAccLabel(acc.label);
+                          setEditAccGroup(acc.group || '');
+                          (document.getElementById('edit-account-modal') as HTMLDialogElement)?.showModal();
+                        }}
+                        className="p-1.5 text-white/20 hover:text-sky-400 transition-colors"
+                        title="Edit Account"
+                      >
+                        <Settings className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => deleteAccount(acc.id)}
@@ -928,14 +1402,25 @@ export default function App() {
                                 <span className="text-[8px] bg-white/5 px-1 rounded text-white/40">{p.leverage}x</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <div className="flex flex-col items-end">
-                                  <span className={`text-xs font-mono font-bold ${p.unrealizedProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {p.unrealizedProfit >= 0 ? '+' : ''}{p.unrealizedProfit.toFixed(2)} USDT
-                                  </span>
-                                  <span className={`text-[10px] font-mono font-medium ${p.pnlPct >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'}`}>
-                                    {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%
-                                  </span>
-                                </div>
+                                  <div className="flex flex-col items-end">
+                                    <span className={`text-xs font-mono font-bold ${p.unrealizedProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                      {p.unrealizedProfit >= 0 ? '+' : ''}{p.unrealizedProfit.toFixed(2)} USDT
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-1 h-1 rounded-full bg-sky-500 animate-pulse" />
+                                        <span className="text-[8px] text-sky-500/50 uppercase font-bold tracking-tighter">Live PnL</span>
+                                      </span>
+                                      {peakProfitRef.current[`${acc.id}_${p.symbol}`] > 0 && (
+                                        <span className="text-[8px] font-mono text-white/30">
+                                          Peak: ${peakProfitRef.current[`${acc.id}_${p.symbol}`].toFixed(2)}
+                                        </span>
+                                      )}
+                                      <span className={`text-[10px] font-mono font-medium ${p.pnlPct >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'}`}>
+                                        {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%
+                                      </span>
+                                    </div>
+                                  </div>
                                 <button 
                                   onClick={() => closePosition(acc.id, p.symbol)}
                                   className="p-1.5 hover:bg-red-500/10 rounded-lg text-white/20 hover:text-red-400 transition-all"
@@ -965,6 +1450,9 @@ export default function App() {
                     </div>
                   )}
                 </motion.div>
+                    ))}
+                  </div>
+                </div>
               ))}
 
               {/* Add Account Card */}
@@ -1003,7 +1491,13 @@ export default function App() {
               </div>
               <div className="flex-1 w-full relative">
                 {chartData.length > 0 ? (
-                  <CandlestickChart data={chartData} showMacd={useMacd} />
+                  <CandlestickChart 
+                    data={chartData} 
+                    showMacd={useMacd} 
+                    macdFast={Number(macdFast)}
+                    macdSlow={Number(macdSlow)}
+                    macdSignal={Number(macdSignal)}
+                  />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-white/20">
                     <RefreshCw className="w-8 h-8 mb-2 animate-spin" />
@@ -1059,44 +1553,72 @@ export default function App() {
                       </div>
                       <div>
                         <label className="block text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Symbol</label>
-                        <select 
-                          value={selectedSymbol}
-                          onChange={(e) => setSelectedSymbol(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors appearance-none"
-                        >
-                          {symbols.map(s => (
-                            <option key={s.symbol} value={s.symbol}>{s.symbol}</option>
-                          ))}
-                        </select>
+                        <SymbolSelector 
+                          selectedSymbol={selectedSymbol}
+                          setSelectedSymbol={setSelectedSymbol}
+                          symbols={symbols}
+                          symbolSearch={symbolSearch}
+                          setSymbolSearch={setSymbolSearch}
+                          isSymbolListOpen={isSymbolListOpen}
+                          setIsSymbolListOpen={setIsSymbolListOpen}
+                        />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
-                          Take Profit %
-                          <Tooltip text="Target profit percentage to automatically close the position.">
+                          TP on Buy (%)
+                          <Tooltip text="Target profit percentage for Long (Buy) positions.">
                             <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                           </Tooltip>
                         </label>
                         <input 
                           type="number" 
-                          value={tpPct}
-                          onChange={(e) => setTpPct(e.target.value)}
+                          value={tpBuyPct}
+                          onChange={(e) => setTpBuyPct(e.target.value)}
                           className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
                         />
                       </div>
                       <div>
                         <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
-                          Stop Loss %
-                          <Tooltip text="Maximum loss percentage before automatically closing the position.">
+                          TP on Sell (%)
+                          <Tooltip text="Target profit percentage for Short (Sell) positions.">
                             <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                           </Tooltip>
                         </label>
                         <input 
                           type="number" 
-                          value={slPct}
-                          onChange={(e) => setSlPct(e.target.value)}
+                          value={tpSellPct}
+                          onChange={(e) => setTpSellPct(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                          SL on Buy (%)
+                          <Tooltip text="Stop loss percentage for Long (Buy) positions.">
+                            <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                          </Tooltip>
+                        </label>
+                        <input 
+                          type="number" 
+                          value={slBuyPct}
+                          onChange={(e) => setSlBuyPct(e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                          SL on Sell (%)
+                          <Tooltip text="Stop loss percentage for Short (Sell) positions.">
+                            <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                          </Tooltip>
+                        </label>
+                        <input 
+                          type="number" 
+                          value={slSellPct}
+                          onChange={(e) => setSlSellPct(e.target.value)}
                           className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
                         />
                       </div>
@@ -1105,17 +1627,17 @@ export default function App() {
                 )}
 
                 {market === 'SPOT' && (
-                  <div>
+                  <div className="mb-4">
                     <label className="block text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Symbol</label>
-                    <select 
-                      value={selectedSymbol}
-                      onChange={(e) => setSelectedSymbol(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors appearance-none"
-                    >
-                      {symbols.map(s => (
-                        <option key={s.symbol} value={s.symbol}>{s.symbol}</option>
-                      ))}
-                    </select>
+                    <SymbolSelector 
+                      selectedSymbol={selectedSymbol}
+                      setSelectedSymbol={setSelectedSymbol}
+                      symbols={symbols}
+                      symbolSearch={symbolSearch}
+                      setSymbolSearch={setSymbolSearch}
+                      isSymbolListOpen={isSymbolListOpen}
+                      setIsSymbolListOpen={setIsSymbolListOpen}
+                    />
                   </div>
                 )}
 
@@ -1170,11 +1692,13 @@ export default function App() {
                 <div className="space-y-4">
                   {/* Section Tabs */}
                   <div className="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
-                    {(['BASIC', 'RISK', 'INDICATORS'] as const).map((s) => (
+                    {(['BASIC', 'RISK', 'INDICATORS', 'PRESETS', 'BACKTEST'] as const).map((s) => (
                       <Tooltip key={s} text={
                         s === 'BASIC' ? 'Core strategy parameters like EMA periods and entry conditions.' :
                         s === 'RISK' ? 'Risk management settings including max duration and trailing stop.' :
-                        'Advanced technical filters like RSI and MACD confirmation.'
+                        s === 'INDICATORS' ? 'Advanced technical filters like RSI and MACD confirmation.' :
+                        s === 'PRESETS' ? 'Quickly apply pre-configured strategy templates.' :
+                        'Test your current strategy against historical data.'
                       }>
                         <button
                           onClick={() => setOpenSection(s)}
@@ -1190,42 +1714,159 @@ export default function App() {
                     ))}
                   </div>
 
-                  <div className="flex gap-2 pt-2">
-                    <Tooltip text="Aggressive strategy for fast price movements. Short EMA: 5, Long EMA: 13, 1m duration.">
-                      <button 
-                        onClick={() => {
-                          setEmaShort('5');
-                          setEmaLong('13');
-                          setTpPct('1.0');
-                          setSlPct('0.5');
-                          setMaxDuration('1');
-                          setTrailingStop('5');
-                          setStatus({ msg: 'Quick Scalp preset applied (1m duration)', ok: true });
-                        }}
-                        className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-2 text-[10px] font-bold transition-all"
-                      >
-                        QUICK SCALP (1M)
-                      </button>
-                    </Tooltip>
-                    <Tooltip text="Balanced strategy for medium-term trends. Short EMA: 9, Long EMA: 21, 15m duration.">
-                      <button 
-                        onClick={() => {
-                          setEmaShort('9');
-                          setEmaLong('21');
-                          setTpPct('3.0');
-                          setSlPct('1.5');
-                          setMaxDuration('15');
-                          setTrailingStop('15');
-                          setStatus({ msg: 'Standard Scalp preset applied', ok: true });
-                        }}
-                        className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-2 text-[10px] font-bold transition-all"
-                      >
-                        STANDARD (15M)
-                      </button>
-                    </Tooltip>
-                  </div>
-
                   <AnimatePresence mode="wait">
+                    {openSection === 'BACKTEST' && (
+                      <motion.div
+                        key="backtest"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        className="space-y-4"
+                      >
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Backtest Period (Days)</label>
+                            <select 
+                              value={backtestDays}
+                              onChange={(e) => setBacktestDays(e.target.value)}
+                              className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50"
+                            >
+                              <option value="1">1 Day</option>
+                              <option value="3">3 Days</option>
+                              <option value="7">7 Days</option>
+                            </select>
+                          </div>
+                          
+                          <button 
+                            onClick={runBacktest}
+                            disabled={backtestLoading}
+                            className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-black font-bold py-2 rounded-lg text-[10px] transition-all flex items-center justify-center gap-2"
+                          >
+                            {backtestLoading ? (
+                              <>
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                Running Simulation...
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3 h-3" />
+                                Start Backtest
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {backtestResults && (
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <p className="text-[9px] text-white/40 uppercase mb-1">Win Rate</p>
+                                <p className={`text-sm font-bold ${backtestResults.stats.winRate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  {backtestResults.stats.winRate.toFixed(1)}%
+                                </p>
+                              </div>
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <p className="text-[9px] text-white/40 uppercase mb-1">Total PnL</p>
+                                <p className={`text-sm font-bold ${backtestResults.stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  ${backtestResults.stats.totalPnl.toFixed(2)}
+                                </p>
+                              </div>
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <p className="text-[9px] text-white/40 uppercase mb-1">Total Trades</p>
+                                <p className="text-sm font-bold text-white/80">{backtestResults.stats.totalTrades}</p>
+                              </div>
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <p className="text-[9px] text-white/40 uppercase mb-1">Avg Trade</p>
+                                <p className={`text-sm font-bold ${backtestResults.stats.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  ${backtestResults.stats.avgPnl.toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                              <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex items-center justify-between">
+                                <span className="text-[9px] font-bold text-white/60 uppercase">Recent Backtest Trades</span>
+                                <span className="text-[9px] text-white/40">{backtestResults.trades.length} trades</span>
+                              </div>
+                              <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                {backtestResults.trades.length > 0 ? (
+                                  <table className="w-full text-[9px]">
+                                    <thead className="bg-black/20 text-white/40 sticky top-0">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left font-medium">Side</th>
+                                        <th className="px-3 py-2 text-left font-medium">PnL</th>
+                                        <th className="px-3 py-2 text-left font-medium">Reason</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                      {backtestResults.trades.slice().reverse().map((t, i) => (
+                                        <tr key={i} className="hover:bg-white/5 transition-colors">
+                                          <td className={`px-3 py-2 font-bold ${t.side === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {t.side}
+                                          </td>
+                                          <td className={`px-3 py-2 font-mono ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {t.pnl >= 0 ? '+' : ''}{t.pnl.toFixed(2)}
+                                          </td>
+                                          <td className="px-3 py-2 text-white/40">{t.reason}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <div className="p-8 text-center text-white/20 text-[10px]">No trades executed in this period</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {openSection === 'PRESETS' && (
+                      <motion.div
+                        key="presets"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        className="space-y-3"
+                      >
+                        <div className="grid grid-cols-1 gap-2">
+                          {PRESETS_DATA.map((preset) => (
+                            <button
+                              key={preset.name}
+                              onClick={() => {
+                                if (preset.params.emaShort) setEmaShort(preset.params.emaShort);
+                                if (preset.params.emaLong) setEmaLong(preset.params.emaLong);
+                                if (preset.params.tpBuyPct) setTpBuyPct(preset.params.tpBuyPct);
+                                if (preset.params.tpSellPct) setTpSellPct(preset.params.tpSellPct);
+                                if (preset.params.slPct) {
+                                  setSlPct(preset.params.slPct);
+                                  setSlBuyPct(preset.params.slPct);
+                                  setSlSellPct(preset.params.slPct);
+                                }
+                                if (preset.params.maxDuration) setMaxDuration(preset.params.maxDuration);
+                                if (preset.params.trailingStop) setTrailingStop(preset.params.trailingStop);
+                                if (preset.params.profitFloor) setProfitFloorPct(preset.params.profitFloor);
+                                if (preset.params.strategy) setStrategy(preset.params.strategy);
+                                if (preset.params.rsiPeriod) setRsiPeriod(preset.params.rsiPeriod);
+                                if (preset.params.rsiOversold) setRsiOversold(preset.params.rsiOversold);
+                                if (preset.params.rsiOverbought) setRsiOverbought(preset.params.rsiOverbought);
+                                setStatus({ msg: `${preset.name} preset applied`, ok: true });
+                              }}
+                              className="group flex flex-col items-start p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-left"
+                            >
+                              <span className="text-[11px] font-bold text-sky-400 group-hover:text-sky-300 transition-colors uppercase tracking-wider">
+                                {preset.name}
+                              </span>
+                              <span className="text-[9px] text-white/40 mt-1 leading-relaxed">
+                                {preset.desc}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+
                     {openSection === 'BASIC' && (
                       <motion.div
                         key="basic"
@@ -1295,7 +1936,7 @@ export default function App() {
                           <div>
                             <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
                               Max Duration (min)
-                              <Tooltip text="Maximum time in minutes a position can stay open before being force-closed.">
+                              <Tooltip text="Defines the maximum time (in minutes) a position can remain open before being automatically closed.">
                                 <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                               </Tooltip>
                             </label>
@@ -1308,7 +1949,7 @@ export default function App() {
                           </div>
                           <div>
                             <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
-                              Trailing Stop (%)
+                              Trailing Stop Loss (%)
                               <Tooltip text="Percentage of peak profit to trail. If profit drops by this much from its peak, the trade closes.">
                                 <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                               </Tooltip>
@@ -1317,6 +1958,78 @@ export default function App() {
                               type="number" 
                               value={trailingStop}
                               onChange={(e) => setTrailingStop(e.target.value)}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                              Profit Floor (%)
+                              <Tooltip text="Closes the position if unrealized profit drops below this percentage of the initial trade value. Only activates once profit has exceeded this threshold.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                            <input 
+                              type="number" 
+                              value={profitFloorPct}
+                              onChange={(e) => setProfitFloorPct(e.target.value)}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                              TP on Buy (%)
+                              <Tooltip text="Target profit percentage for Long (Buy) positions.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                            <input 
+                              type="number" 
+                              value={tpBuyPct}
+                              onChange={(e) => setTpBuyPct(e.target.value)}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                              TP on Sell (%)
+                              <Tooltip text="Target profit percentage for Short (Sell) positions.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                            <input 
+                              type="number" 
+                              value={tpSellPct}
+                              onChange={(e) => setTpSellPct(e.target.value)}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                              SL on Buy (%)
+                              <Tooltip text="Stop loss percentage for Long (Buy) positions.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                            <input 
+                              type="number" 
+                              value={slBuyPct}
+                              onChange={(e) => setSlBuyPct(e.target.value)}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                              SL on Sell (%)
+                              <Tooltip text="Stop loss percentage for Short (Sell) positions.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                            <input 
+                              type="number" 
+                              value={slSellPct}
+                              onChange={(e) => setSlSellPct(e.target.value)}
                               className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
                             />
                           </div>
@@ -1461,6 +2174,96 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Bot Performance Statistics */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+                <h2 className="font-bold flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-sky-500" />
+                  Bot Performance
+                  <Tooltip text="Overall performance metrics for the current session. Resets on page refresh.">
+                    <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                  </Tooltip>
+                </h2>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Total Trades</p>
+                    <p className="text-lg font-mono font-bold">{botStats.trades}</p>
+                  </div>
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Win Rate</p>
+                    <p className="text-lg font-mono font-bold">
+                      {botStats.trades > 0 ? ((botStats.wins / botStats.trades) * 100).toFixed(1) : '0.0'}%
+                    </p>
+                  </div>
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Wins / Losses</p>
+                    <p className="text-lg font-mono font-bold">
+                      <span className="text-emerald-400">{botStats.wins}</span>
+                      <span className="text-white/20 mx-1">/</span>
+                      <span className="text-red-400">{botStats.losses}</span>
+                    </p>
+                  </div>
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Total PnL</p>
+                    <p className={`text-lg font-mono font-bold ${botStats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {botStats.totalPnl >= 0 ? '+' : ''}{botStats.totalPnl.toFixed(2)}
+                      <span className="text-[10px] ml-1 text-white/40">USDT</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Order Book */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col h-[400px]">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                <h3 className="text-xs font-bold flex items-center gap-2 uppercase tracking-wider text-white/60">
+                  <BarChart2 className="w-3.5 h-3.5 text-sky-400" />
+                  Order Book
+                </h3>
+                <span className="text-[10px] font-mono text-white/40">{selectedSymbol}</span>
+              </div>
+              
+              <div className="flex-1 grid grid-rows-2 overflow-hidden">
+                {/* Asks (Sells) - Red */}
+                <div className="flex flex-col-reverse overflow-hidden border-b border-white/5">
+                  {orderBook.asks.map(([price, qty], i) => {
+                    const maxQty = Math.max(...orderBook.asks.map(a => Number(a[1])), ...orderBook.bids.map(b => Number(b[1])));
+                    const width = (Number(qty) / maxQty) * 100;
+                    return (
+                      <div key={`ask-${i}`} className="relative flex items-center justify-between px-4 py-1 text-[10px] group hover:bg-white/5 transition-colors">
+                        <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 transition-all duration-500" style={{ width: `${width}%` }} />
+                        <span className="relative font-mono text-red-400">{Number(price).toFixed(2)}</span>
+                        <span className="relative font-mono text-white/60">{Number(qty).toFixed(4)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Bids (Buys) - Green */}
+                <div className="flex flex-col overflow-hidden">
+                  {orderBook.bids.map(([price, qty], i) => {
+                    const maxQty = Math.max(...orderBook.asks.map(a => Number(a[1])), ...orderBook.bids.map(b => Number(b[1])));
+                    const width = (Number(qty) / maxQty) * 100;
+                    return (
+                      <div key={`bid-${i}`} className="relative flex items-center justify-between px-4 py-1 text-[10px] group hover:bg-white/5 transition-colors">
+                        <div className="absolute right-0 top-0 bottom-0 bg-emerald-500/10 transition-all duration-500" style={{ width: `${width}%` }} />
+                        <span className="relative font-mono text-emerald-400">{Number(price).toFixed(2)}</span>
+                        <span className="relative font-mono text-white/60">{Number(qty).toFixed(4)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="p-3 bg-black/20 border-t border-white/10 flex items-center justify-between text-[10px]">
+                <span className="text-white/40">Spread</span>
+                <span className="font-mono text-white/80">
+                  {orderBook.asks.length > 0 && orderBook.bids.length > 0 
+                    ? (Number(orderBook.asks[0][0]) - Number(orderBook.bids[0][0])).toFixed(2)
+                    : '0.00'}
+                </span>
+              </div>
             </div>
 
             {/* Bot Activity Logs */}
@@ -1475,9 +2278,10 @@ export default function App() {
                 </h2>
                 <button 
                   onClick={() => setBotLogs([])}
-                  className="text-[10px] text-white/20 hover:text-white/40 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 rounded-lg transition-all text-[10px] font-bold text-white/40 hover:text-red-400 group"
                 >
-                  Clear
+                  <Trash2 className="w-3 h-3 text-white/20 group-hover:text-red-400 transition-colors" />
+                  Clear Logs
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
@@ -1592,6 +2396,16 @@ export default function App() {
               />
             </div>
             <div>
+              <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Group (Optional)</label>
+              <input 
+                type="text" 
+                value={newAccGroup}
+                onChange={(e) => setNewAccGroup(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                placeholder="e.g. Primary Group"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">API Key</label>
               <input 
                 type="text" 
@@ -1631,6 +2445,128 @@ export default function App() {
           </form>
         </div>
       </dialog>
+
+      {/* Edit Account Modal */}
+      <dialog id="edit-account-modal" className="bg-transparent backdrop:bg-black/80 p-0">
+        <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 m-4">
+          <h2 className="text-xl font-bold mb-6">Edit Binance Account</h2>
+          <form onSubmit={handleUpdateAccount} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Label</label>
+              <input 
+                type="text" 
+                value={editAccLabel}
+                onChange={(e) => setEditAccLabel(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                placeholder="e.g. Main Account"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Group (Optional)</label>
+              <input 
+                type="text" 
+                value={editAccGroup}
+                onChange={(e) => setEditAccGroup(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                placeholder="e.g. Primary Group"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button 
+                type="button"
+                onClick={() => {
+                  setEditingAccount(null);
+                  (document.getElementById('edit-account-modal') as HTMLDialogElement)?.close();
+                }}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                className="flex-1 bg-sky-500 hover:bg-sky-400 text-black font-bold py-3 rounded-xl transition-all"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </dialog>
+
+      {/* Trade Confirmation Modal */}
+      {tradeConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${tradeConfirm.side === 'BUY' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}`}>
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Confirm Trade</h2>
+                <p className="text-xs text-white/40 uppercase tracking-widest">Manual Execution</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Symbol</p>
+                  <p className="font-bold text-sm">{tradeConfirm.symbol}</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Side</p>
+                  <p className={`font-bold text-sm ${tradeConfirm.side === 'BUY' ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {tradeConfirm.side === 'BUY' ? 'BUY / LONG' : 'SELL / SHORT'}
+                  </p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Volume</p>
+                  <p className="font-bold text-sm">${tradeConfirm.volume} USDT</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Take Profit</p>
+                  <p className="font-bold text-sm text-emerald-400">{tradeConfirm.tp}%</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Stop Loss</p>
+                  <p className="font-bold text-sm text-red-400">{tradeConfirm.sl}%</p>
+                </div>
+              </div>
+              
+              <div className="p-4 bg-sky-500/5 border border-sky-500/10 rounded-xl">
+                <p className="text-[10px] text-sky-400/60 leading-relaxed">
+                  This order will be executed across all enabled accounts. Please ensure you have sufficient balance and correct leverage settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setTradeConfirm(null)}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => executeTrade(tradeConfirm.side, true)}
+                disabled={loading}
+                className={`flex-1 font-bold py-3 rounded-xl transition-all shadow-lg ${
+                  tradeConfirm.side === 'BUY' 
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20' 
+                    : 'bg-red-500 hover:bg-red-400 text-black shadow-red-500/20'
+                }`}
+              >
+                {loading ? 'Executing...' : 'Confirm Order'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

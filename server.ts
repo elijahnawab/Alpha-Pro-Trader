@@ -241,6 +241,10 @@ async function bFetch(
   pathname: string,
   { method = "GET", query = {}, signed = false, timeout = 10000 }: any = {}
 ) {
+  if (typeof fetch === 'undefined') {
+    throw new Error("Global fetch is not defined. Ensure you are using Node.js 18+ or a polyfill.");
+  }
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
@@ -275,7 +279,7 @@ async function bFetch(
     }
 
     if (!res.ok) {
-      throw Object.assign(new Error(`Binance request failed: ${res.status}`), {
+      throw Object.assign(new Error(`Binance request failed: ${res.status} ${url.toString()}`), {
         status: res.status,
         statusText: res.statusText,
         binance: json,
@@ -285,13 +289,17 @@ async function bFetch(
   } catch (err: any) {
     clearTimeout(id);
     if (err.name === 'AbortError') {
-      throw new Error(`Binance request timed out after ${timeout}ms`);
+      throw new Error(`Binance request timed out after ${timeout}ms: ${url.toString()}`);
     }
     throw err;
   }
 }
 
 async function pubFetch(base: string, pathname: string, query = {}, timeout = 10000) {
+  if (typeof fetch === 'undefined') {
+    throw new Error("Global fetch is not defined. Ensure you are using Node.js 18+ or a polyfill.");
+  }
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
@@ -312,13 +320,13 @@ async function pubFetch(base: string, pathname: string, query = {}, timeout = 10
     }
     if (!res.ok) {
       console.error(`Binance Public Error: ${res.status} ${url.toString()}`, json);
-      throw Object.assign(new Error("Public request failed"), { status: res.status, binance: json });
+      throw Object.assign(new Error(`Public request failed: ${res.status}`), { status: res.status, binance: json });
     }
     return json;
   } catch (err: any) {
     clearTimeout(id);
     if (err.name === 'AbortError') {
-      throw new Error(`Binance public request timed out after ${timeout}ms`);
+      throw new Error(`Binance public request timed out after ${timeout}ms: ${url.toString()}`);
     }
     console.error(`pubFetch network error: ${url.toString()}`, err.message);
     throw err;
@@ -405,12 +413,18 @@ async function startServer() {
   app.get("/api/accounts", authMiddleware, (req: any, res) => {
     const items = DB.accounts
       .filter((a: any) => a.uid === req.user.uid)
-      .map((a: any) => ({ id: a.id, label: a.label, enabled: a.enabled, createdAt: a.createdAt }));
+      .map((a: any) => ({ 
+        id: a.id, 
+        label: a.label, 
+        group: a.group,
+        enabled: a.enabled, 
+        createdAt: a.createdAt 
+      }));
     res.json(items);
   });
 
   app.post("/api/accounts", authMiddleware, (req: any, res) => {
-    const { label, apiKey, apiSecret, enabled } = req.body || {};
+    const { label, group, apiKey, apiSecret, enabled } = req.body || {};
     if (!apiKey || !apiSecret) return res.status(400).json({ error: "apiKey_apiSecret_required" });
 
     const id = crypto.randomUUID();
@@ -418,6 +432,7 @@ async function startServer() {
       id,
       uid: req.user.uid,
       label: label || `Account ${id.slice(0, 6)}`,
+      group: group || '',
       apiKeyEnc: enc(String(apiKey).trim()),
       apiSecretEnc: enc(String(apiSecret).trim()),
       enabled: enabled !== false,
@@ -429,11 +444,31 @@ async function startServer() {
 
   app.post("/api/accounts/:id/toggle", authMiddleware, (req: any, res) => {
     const id = String(req.params.id);
+    const { enabled } = req.body || {};
     const a = DB.accounts.find((x: any) => x.id === id && x.uid === req.user.uid);
     if (!a) return res.status(404).json({ error: "not_found" });
-    a.enabled = !a.enabled;
+    
+    if (typeof enabled === 'boolean') {
+      a.enabled = enabled;
+    } else {
+      a.enabled = !a.enabled;
+    }
+    
     saveDB(DB);
     res.json({ ok: true, enabled: a.enabled });
+  });
+
+  app.patch("/api/accounts/:id", authMiddleware, (req: any, res) => {
+    const id = String(req.params.id);
+    const { label, group } = req.body || {};
+    const a = DB.accounts.find((x: any) => x.id === id && x.uid === req.user.uid);
+    if (!a) return res.status(404).json({ error: "not_found" });
+    
+    if (label !== undefined) a.label = label;
+    if (group !== undefined) a.group = group;
+    
+    saveDB(DB);
+    res.json({ ok: true });
   });
 
   app.delete("/api/accounts/:id", authMiddleware, (req: any, res) => {
@@ -580,11 +615,36 @@ async function startServer() {
 
   app.get("/api/futures/price", async (req, res) => {
     const { symbol } = req.query || {};
+    if (!symbol) return res.status(400).json({ error: "symbol_required" });
+    
     try {
       const data = await pubFetch(FUT_BASE, "/fapi/v1/ticker/price", { symbol });
       res.json(data);
     } catch (e: any) {
+      console.error(`Price API failure for ${symbol}:`, e.message);
       res.status(500).json({ error: "price_failed", message: e.message });
+    }
+  });
+
+  app.get("/api/futures/depth", async (req, res) => {
+    const { symbol, limit = 20 } = req.query || {};
+    if (!symbol) return res.status(400).json({ error: "symbol_required" });
+    try {
+      const data = await pubFetch(FUT_BASE, "/fapi/v1/depth", { symbol, limit });
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: "depth_failed", message: e.message });
+    }
+  });
+
+  app.get("/api/spot/depth", async (req, res) => {
+    const { symbol, limit = 20 } = req.query || {};
+    if (!symbol) return res.status(400).json({ error: "symbol_required" });
+    try {
+      const data = await pubFetch(SPOT_BASE, "/api/v3/depth", { symbol, limit });
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: "depth_failed", message: e.message });
     }
   });
 
@@ -775,6 +835,12 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // Global error handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Global error handler:", err);
+    res.status(500).json({ error: "internal_server_error", message: err.message });
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
