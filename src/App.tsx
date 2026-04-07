@@ -25,7 +25,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  History
+  History,
+  Zap,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -242,6 +244,57 @@ const SymbolSelector = ({
   );
 };
 
+const Accordion = ({ title, icon: Icon, children, isOpen, onToggle, tooltip }: { 
+  title: string; 
+  icon: any; 
+  children: React.ReactNode; 
+  isOpen: boolean; 
+  onToggle: () => void;
+  tooltip?: string;
+}) => {
+  return (
+    <div className="border border-white/5 rounded-xl overflow-hidden bg-white/5">
+      <button
+        onClick={onToggle}
+        className={`w-full flex items-center justify-between p-4 transition-colors ${isOpen ? 'bg-white/5' : 'hover:bg-white/5'}`}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg transition-all duration-300 ${isOpen ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' : 'bg-white/5 text-white/40'}`}>
+            <Icon className="w-4 h-4" />
+          </div>
+          <div className="text-left">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold uppercase tracking-wider ${isOpen ? 'text-white' : 'text-white/60'}`}>
+                {title}
+              </span>
+              {tooltip && (
+                <Tooltip text={tooltip}>
+                  <Info className="w-3 h-3 text-white/20" />
+                </Tooltip>
+              )}
+            </div>
+          </div>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-white/20 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+          >
+            <div className="p-4 pt-2 border-t border-white/5 bg-black/20">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('alpha_token') || '');
   const [username, setUsername] = useState('');
@@ -288,7 +341,14 @@ export default function App() {
   const [chartInterval, setChartInterval] = useState('1m');
   const [currentPrice, setCurrentPrice] = useState<string>('0.00');
   const [prevPrice, setPrevPrice] = useState<string>('0.00');
-  const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS' | 'PRESETS' | 'BACKTEST'>('BASIC');
+  const [expandedSections, setExpandedSections] = useState<string[]>(['BASIC']);
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => 
+      prev.includes(section) 
+        ? prev.filter(s => s !== section) 
+        : [...prev, section]
+    );
+  };
   const [backtestResults, setBacktestResults] = useState<{ trades: any[]; stats: any } | null>(null);
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [backtestDays, setBacktestDays] = useState('7');
@@ -3334,28 +3394,84 @@ export default function App() {
                     <tr className="border-b border-white/5">
                       <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
                         <button 
-                          onClick={() => setHistorySort({ field: 'time', dir: historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          onClick={() => setHistorySort({ field: 'time', dir: historySort.field === 'time' && historySort.dir === 'desc' ? 'asc' : 'desc' })}
                           className="flex items-center gap-1 hover:text-white transition-colors"
                         >
-                          Time <ArrowUpDown className="w-3 h-3" />
+                          Time <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'time' ? 'text-sky-500' : ''}`} />
                         </button>
                       </th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Account</th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Symbol</th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Side</th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Entry Price</th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Exit Price</th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Quantity</th>
                       <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
                         <button 
-                          onClick={() => setHistorySort({ field: 'realizedPnL', dir: historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          onClick={() => setHistorySort({ field: 'accountLabel', dir: historySort.field === 'accountLabel' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
                           className="flex items-center gap-1 hover:text-white transition-colors"
                         >
-                          PnL <ArrowUpDown className="w-3 h-3" />
+                          Account <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'accountLabel' ? 'text-sky-500' : ''}`} />
                         </button>
                       </th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Duration</th>
-                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">Reason</th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'symbol', dir: historySort.field === 'symbol' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Symbol <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'symbol' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'side', dir: historySort.field === 'side' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Side <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'side' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'entryPrice', dir: historySort.field === 'entryPrice' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Entry Price <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'entryPrice' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'exitPrice', dir: historySort.field === 'exitPrice' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Exit Price <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'exitPrice' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'quantity', dir: historySort.field === 'quantity' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Quantity <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'quantity' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'realizedPnL', dir: historySort.field === 'realizedPnL' && historySort.dir === 'desc' ? 'asc' : 'desc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          PnL <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'realizedPnL' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'duration', dir: historySort.field === 'duration' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Duration <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'duration' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
+                      <th className="pb-4 px-4 text-[10px] uppercase tracking-wider text-white/40 font-bold">
+                        <button 
+                          onClick={() => setHistorySort({ field: 'reason', dir: historySort.field === 'reason' && historySort.dir === 'asc' ? 'desc' : 'asc' })}
+                          className="flex items-center gap-1 hover:text-white transition-colors"
+                        >
+                          Reason <ArrowUpDown className={`w-3 h-3 ${historySort.field === 'reason' ? 'text-sky-500' : ''}`} />
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -3384,8 +3500,16 @@ export default function App() {
                         .sort((a, b) => {
                           const aVal = a[historySort.field];
                           const bVal = b[historySort.field];
-                          if (historySort.dir === 'asc') return aVal > bVal ? 1 : -1;
-                          return aVal < bVal ? 1 : -1;
+                          
+                          if (typeof aVal === 'number' && typeof bVal === 'number') {
+                            return historySort.dir === 'asc' ? aVal - bVal : bVal - aVal;
+                          }
+                          
+                          const aStr = String(aVal).toLowerCase();
+                          const bStr = String(bVal).toLowerCase();
+                          
+                          if (historySort.dir === 'asc') return aStr > bStr ? 1 : -1;
+                          return aStr < bStr ? 1 : -1;
                         })
                         .slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage)
                         .map((t) => (
