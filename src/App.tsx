@@ -55,6 +55,56 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode; 
   );
 };
 
+const AccordionSection = ({ 
+  id, 
+  title, 
+  icon: Icon, 
+  expanded, 
+  onToggle, 
+  children,
+  tooltip
+}: { 
+  id: string; 
+  title: string; 
+  icon: any; 
+  expanded: boolean; 
+  onToggle: () => void; 
+  children: React.ReactNode;
+  tooltip?: string;
+}) => (
+  <div className="border border-white/5 rounded-xl overflow-hidden bg-black/20">
+    <button
+      onClick={onToggle}
+      className={`w-full flex items-center justify-between p-3 transition-colors ${expanded ? 'bg-white/5' : 'hover:bg-white/5'}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${expanded ? 'bg-sky-500 text-black' : 'bg-white/5 text-white/40'}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="text-left">
+          <h4 className={`text-xs font-bold uppercase tracking-wider ${expanded ? 'text-white' : 'text-white/40'}`}>{title}</h4>
+          {tooltip && !expanded && <p className="text-[9px] text-white/20 truncate w-48">{tooltip}</p>}
+        </div>
+      </div>
+      <ChevronDown className={`w-4 h-4 text-white/20 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+    </button>
+    <AnimatePresence initial={false}>
+      {expanded && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.3, ease: 'easeInOut' }}
+        >
+          <div className="p-4 border-t border-white/5 bg-white/[0.02]">
+            {children}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+
 interface Account {
   id: string;
   label: string;
@@ -341,6 +391,7 @@ export default function App() {
   const [chartInterval, setChartInterval] = useState('1m');
   const [currentPrice, setCurrentPrice] = useState<string>('0.00');
   const [prevPrice, setPrevPrice] = useState<string>('0.00');
+  const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS' | 'PRESETS' | 'BACKTEST' | 'SETTINGS'>('BASIC');
   const [expandedSections, setExpandedSections] = useState<string[]>(['BASIC']);
   const toggleSection = (section: string) => {
     setExpandedSections(prev => 
