@@ -55,7 +55,7 @@ let ALLOW_LIVE_ORDERS =
 
 // Hard trade limits
 const MIN_TRADE_USD = 5;
-const MAX_TRADE_USD = 10;
+const MAX_TRADE_USD = 1000;
 
 // Spot dollar quotes supported
 const SPOT_DOLLAR_QUOTES = new Set(["USDT", "USDC", "FDUSD", "BUSD"]);
@@ -630,79 +630,81 @@ async function startServer() {
 
   app.get("/api/user/summary", authMiddleware, async (req: any, res) => {
     try {
-      const accounts = DB.accounts.filter((a: any) => a.uid === req.user.uid && a.enabled);
+      const accounts = DB.accounts.filter((a: any) => a.uid === req.user.uid);
       const out = [];
 
       for (const a of accounts) {
         const apiKey = dec(a.apiKeyEnc);
         const apiSecret = dec(a.apiSecretEnc);
-        if (!apiKey || !apiSecret) {
-          out.push({
-            id: a.id,
-            label: a.label,
-            enabled: a.enabled,
-            futures: null,
-            spot: null,
-            errFut: "Invalid credentials",
-            errSpot: "Invalid credentials",
-          });
-          continue;
-        }
-
+        
         let fut = null;
         let spot = null;
         let errFut = null;
         let errSpot = null;
+        let restrictions = null;
 
-        try {
-          const acct = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/account", { signed: true });
-          const posRisk = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/positionRisk", { signed: true });
-          const openPos = (posRisk || []).filter((p: any) => Number(p.positionAmt) !== 0);
+        if (!apiKey || !apiSecret) {
+          errFut = "Invalid credentials";
+          errSpot = "Invalid credentials";
+        } else if (a.enabled) {
+          try {
+            // Check API restrictions for diagnostics
+            restrictions = await bFetch(SPOT_BASE, apiKey, apiSecret, "/sapi/v1/account/apiRestrictions", { signed: true }).catch(() => null);
+            
+            const acct = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/account", { signed: true });
+            const posRisk = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/positionRisk", { signed: true });
+            const openPos = (posRisk || []).filter((p: any) => Number(p.positionAmt) !== 0);
 
-          fut = {
-            walletBalance: Number(acct?.totalWalletBalance ?? 0),
-            availableBalance: Number(acct?.availableBalance ?? 0),
-            unrealizedProfit: Number(acct?.totalUnrealizedProfit ?? 0),
-            positions: openPos.map((p: any) => ({
-              symbol: p.symbol,
-              amount: Number(p.positionAmt),
-              entryPrice: Number(p.entryPrice),
-              markPrice: Number(p.markPrice),
-              unrealizedProfit: Number(p.unRealizedProfit),
-              leverage: Number(p.leverage),
-              marginType: p.marginType,
-              liquidationPrice: Number(p.liquidationPrice),
-              pnlPct: Number(p.entryPrice) > 0 ? (Number(p.unRealizedProfit) / (Math.abs(Number(p.positionAmt)) * Number(p.entryPrice) / Number(p.leverage))) * 100 : 0
-            }))
-          };
-        } catch (e: any) {
-          errFut = e?.binance ? (e.binance.msg || e.binance.message || JSON.stringify(e.binance)) : (e?.message || String(e));
-        }
-
-        try {
-          const acct = await bFetch(SPOT_BASE, apiKey, apiSecret, "/api/v3/account", { signed: true });
-          const balances = acct?.balances || [];
-          const by: any = {};
-          let total = 0;
-          for (const q of SPOT_DOLLAR_QUOTES) {
-            const b = balances.find((x: any) => x.asset === q);
-            const free = b ? Number(b.free ?? 0) : 0;
-            by[q] = free;
-            total += free;
+            fut = {
+              walletBalance: Number(acct?.totalWalletBalance ?? 0),
+              availableBalance: Number(acct?.availableBalance ?? 0),
+              unrealizedProfit: Number(acct?.totalUnrealizedProfit ?? 0),
+              canTrade: acct?.canTrade ?? false,
+              canWithdraw: acct?.canWithdraw ?? false,
+              canDeposit: acct?.canDeposit ?? false,
+              positions: openPos.map((p: any) => ({
+                symbol: p.symbol,
+                amount: Number(p.positionAmt),
+                entryPrice: Number(p.entryPrice),
+                markPrice: Number(p.markPrice),
+                unrealizedProfit: Number(p.unRealizedProfit),
+                leverage: Number(p.leverage),
+                marginType: p.marginType,
+                liquidationPrice: Number(p.liquidationPrice),
+                pnlPct: Number(p.entryPrice) > 0 ? (Number(p.unRealizedProfit) / (Math.abs(Number(p.positionAmt)) * Number(p.entryPrice) / Number(p.leverage))) * 100 : 0
+              }))
+            };
+          } catch (e: any) {
+            errFut = e?.binance ? (e.binance.msg || e.binance.message || JSON.stringify(e.binance)) : (e?.message || String(e));
           }
-          spot = { dollarTotal: total, dollarByAsset: by };
-        } catch (e: any) {
-          errSpot = e?.binance ? (e.binance.msg || e.binance.message || JSON.stringify(e.binance)) : (e?.message || String(e));
+
+          try {
+            const acct = await bFetch(SPOT_BASE, apiKey, apiSecret, "/api/v3/account", { signed: true });
+            const balances = acct?.balances || [];
+            const by: any = {};
+            let total = 0;
+            for (const q of SPOT_DOLLAR_QUOTES) {
+              const b = balances.find((x: any) => x.asset === q);
+              const free = b ? Number(b.free ?? 0) : 0;
+              by[q] = free;
+              total += free;
+            }
+            spot = { dollarTotal: total, dollarByAsset: by };
+          } catch (e: any) {
+            errSpot = e?.binance ? (e.binance.msg || e.binance.message || JSON.stringify(e.binance)) : (e?.message || String(e));
+          }
         }
 
         out.push({
           id: a.id,
           label: a.label,
+          group: a.group,
           enabled: a.enabled,
           futures: fut,
           spot,
           errFut,
           errSpot,
+          restrictions
         });
       }
 
@@ -935,12 +937,60 @@ async function startServer() {
 
           results.push({ id: a.id, ok: true, orderId: order.orderId });
         } catch (e: any) {
-          results.push({ id: a.id, ok: false, error: e?.binance || e?.message || String(e) });
+          const isPerm = e?.binance?.code === -2015 || (e?.message && e.message.includes('-2015'));
+          results.push({ 
+            id: a.id, 
+            ok: false, 
+            error: e?.binance || e?.message || String(e),
+            isPermissionError: isPerm
+          });
         }
       }
       res.json({ ok: true, results });
     } catch (e: any) {
       res.status(500).json({ error: "trade_failed", message: e.message });
+    }
+  });
+
+  app.post("/api/futures/check-permissions", authMiddleware, async (req: any, res) => {
+    const { accountId } = req.body || {};
+    if (!accountId) return res.status(400).json({ error: "accountId_required" });
+
+    const a = DB.accounts.find((x: any) => x.id === accountId && x.uid === req.user.uid);
+    if (!a) return res.status(404).json({ error: "account_not_found" });
+
+    const apiKey = dec(a.apiKeyEnc);
+    const apiSecret = dec(a.apiSecretEnc);
+
+    try {
+      // 1. Check account info (also tests API key validity)
+      const futuresAcc = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/account", { signed: true });
+      
+      // 2. Check restrictions explicitly if possible (some endpoints show info)
+      // /fapi/v1/apiRestrictions (only works for some keys)
+      let restrictions = null;
+      try {
+        restrictions = await bFetch("https://api.binance.com", apiKey, apiSecret, "/api/v3/account/apiRestrictions", { signed: true });
+      } catch (e) {
+        // Might fail if it's a futures-only key or restriction on this endpoint
+      }
+
+      res.json({
+        ok: true,
+        futuresEnabled: !!futuresAcc,
+        canTrade: futuresAcc?.canTrade || false,
+        canDeposit: futuresAcc?.canDeposit || false,
+        canWithdraw: futuresAcc?.canWithdraw || false,
+        restrictions: restrictions || { msg: "Specific restriction details only available for some Spot keys" }
+      });
+    } catch (e: any) {
+      const bError = e?.binance || {};
+      res.json({
+        ok: false,
+        error: bError.msg || e.message,
+        code: bError.code,
+        isPermissionError: bError.code === -2015
+      });
     }
   });
 
@@ -957,23 +1007,44 @@ async function startServer() {
 
     try {
       const posRisk = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/positionRisk", { signed: true, query: { symbol } });
-      const pos = posRisk.find((p: any) => p.symbol === symbol && Number(p.positionAmt) !== 0);
-      if (!pos) return res.json({ ok: true, msg: "No open position" });
+      const activePositions = Array.isArray(posRisk) ? posRisk.filter((p: any) => Number(p.positionAmt) !== 0) : [];
+      
+      if (activePositions.length === 0) return res.json({ ok: true, msg: "No open positions found" });
 
-      const side = Number(pos.positionAmt) > 0 ? "SELL" : "BUY";
-      const qty = Math.abs(Number(pos.positionAmt));
+      const orders = [];
+      for (const pos of activePositions) {
+        const amt = Number(pos.positionAmt);
+        const side = amt > 0 ? "SELL" : "BUY";
+        // Use the string directly to avoid JS float precision issues on Binance
+        const qty = pos.positionAmt.startsWith("-") ? pos.positionAmt.substring(1) : pos.positionAmt;
 
-      const order = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
-        method: "POST",
-        signed: true,
-        query: {
+        const query: any = {
           symbol,
           side,
           type: "MARKET",
-          quantity: String(qty),
-          reduceOnly: "true",
-        },
-      });
+          quantity: qty,
+        };
+
+        // Handle Hedge Mode vs One-way Mode
+        if (pos.positionSide && pos.positionSide !== "BOTH") {
+          query.positionSide = pos.positionSide;
+        } else {
+          query.reduceOnly = "true";
+        }
+
+        try {
+          const order = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
+            method: "POST",
+            signed: true,
+            query,
+          });
+          orders.push(order);
+        } catch (orderErr: any) {
+          console.error(`Closing ${symbol} ${pos.positionSide} failed:`, orderErr.binance || orderErr.message);
+          // If we have multiple positions and one fails, we still continue to try others
+          if (activePositions.length === 1) throw orderErr; 
+        }
+      }
 
       // Cancel all open orders for this symbol to clean up TP/SL
       await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/allOpenOrders", {
@@ -982,9 +1053,19 @@ async function startServer() {
         query: { symbol },
       }).catch(() => {});
 
-      res.json({ ok: true, orderId: order.orderId });
+      res.json({ ok: true, orders });
     } catch (e: any) {
-      res.status(500).json({ error: "close_failed", details: e?.binance || e?.message || String(e) });
+      const binanceError = e?.binance;
+      const errorMessage = binanceError 
+        ? (binanceError.code === -2015 
+            ? "Binance Permission Error: Please ensure your API Key has 'Enable Futures' and 'Enable Spot & Margin Trading' enabled, and check your IP restrictions." 
+            : `Binance: ${binanceError.msg || binanceError.code}`)
+        : (e?.message || String(e));
+      res.status(500).json({ 
+        error: "close_failed", 
+        message: errorMessage,
+        details: binanceError || e?.message 
+      });
     }
   });
 
