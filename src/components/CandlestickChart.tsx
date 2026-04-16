@@ -1,4 +1,11 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { 
+  Settings,
+  Eye,
+  EyeOff,
+  TrendingUp,
+  Info
+} from 'lucide-react';
 import { 
   createChart, 
   IChartApi, 
@@ -20,12 +27,15 @@ interface CandleData {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 interface CandlestickChartProps {
   data: CandleData[];
   emaShort?: number;
   emaLong?: number;
+  onEmaShortChange?: (val: string) => void;
+  onEmaLongChange?: (val: string) => void;
   showMacd?: boolean;
   macdFast?: number;
   macdSlow?: number;
@@ -34,8 +44,10 @@ interface CandlestickChartProps {
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ 
   data, 
-  emaShort = 5,
-  emaLong = 13,
+  emaShort = 9,
+  emaLong = 21,
+  onEmaShortChange,
+  onEmaLongChange,
   showMacd = true,
   macdFast = 12,
   macdSlow = 26,
@@ -55,6 +67,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const histogramSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
   const [chartType, setChartType] = useState<'CANDLE' | 'OHLC'>('CANDLE');
+  const [showEma, setShowEma] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [legendData, setLegendData] = useState<CandleData | null>(null);
 
   // EMA Helper
   const calculateEMA = (values: number[], period: number) => {
@@ -90,13 +105,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: 'rgba(255, 255, 255, 0.5)',
+        fontFamily: 'Inter, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: 'rgba(255, 255, 255, 0.03)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
+        vertLine: {
+          labelBackgroundColor: '#38bdf8',
+        },
+        horzLine: {
+          labelBackgroundColor: '#38bdf8',
+        },
       },
       rightPriceScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -138,7 +160,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     });
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
-        top: 0.8, // highest point of the series will be 80% away from the top
+        top: 0.8,
         bottom: 0,
       },
     });
@@ -146,16 +168,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     // EMA Series
     const emaShortSeries = chart.addSeries(LineSeries, {
-      color: '#38bdf8', // Sky 400
-      lineWidth: 1,
+      color: '#38bdf8',
+      lineWidth: 2,
       priceLineVisible: false,
+      crosshairMarkerVisible: false,
     });
     emaShortSeriesRef.current = emaShortSeries;
 
     const emaLongSeries = chart.addSeries(LineSeries, {
-      color: '#f472b6', // Pink 400
-      lineWidth: 1,
+      color: '#f472b6',
+      lineWidth: 2,
       priceLineVisible: false,
+      crosshairMarkerVisible: false,
     });
     emaLongSeriesRef.current = emaLongSeries;
 
@@ -168,16 +192,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           textColor: 'rgba(255, 255, 255, 0.5)',
         },
         grid: {
-          vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-          horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+          vertLines: { color: 'rgba(255, 255, 255, 0.03)' },
+          horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
         },
         rightPriceScale: {
           borderColor: 'rgba(255, 255, 255, 0.1)',
         },
         timeScale: {
-          visible: false, // Hide time scale for MACD chart
+          visible: false,
         },
-        handleScroll: false, // Scroll is handled by main chart
+        handleScroll: false,
         handleScale: false,
       });
       macdChartRef.current = macdChart;
@@ -204,13 +228,31 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       });
       histogramSeriesRef.current = histogramSeries;
 
-    // Sync charts
+      // Sync charts
       chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
         if (range && macdChart) {
           macdChart.timeScale().setVisibleRange(range);
         }
       });
     }
+
+    // Subscribe to crosshair move for legend
+    chart.subscribeCrosshairMove((param) => {
+      if (param.time && param.seriesData.size > 0) {
+        const candle = param.seriesData.get(chartType === 'CANDLE' ? candlestickSeries : ohlcSeries) as any;
+        if (candle) {
+          setLegendData({
+            time: Number(param.time) * 1000,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+          });
+        }
+      } else {
+        setLegendData(null);
+      }
+    });
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -244,7 +286,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       signalLineSeriesRef.current = null;
       histogramSeriesRef.current = null;
     };
-  }, [showMacd]);
+  }, [showMacd, chartType]);
 
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return;
@@ -263,11 +305,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       .filter(d => d && !isNaN(d.time))
       .map(d => ({
         time: (d.time / 1000) as Time,
-        value: (d as any).volume || 0,
+        value: d.volume || 0,
         color: d.close >= d.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
       }));
 
-    // Toggle visibility based on chartType
     if (chartType === 'CANDLE') {
       candlestickSeriesRef.current?.setData(formattedData);
       ohlcSeriesRef.current?.setData([]);
@@ -278,25 +319,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     volumeSeriesRef.current?.setData(volumeData);
 
-    // Calculate and set EMA data
     const closes = data.map(d => d.close);
     const emaShortValues = calculateEMA(closes, emaShort);
     const emaLongValues = calculateEMA(closes, emaLong);
 
-    const emaShortData: LineData[] = data.map((d, i) => ({
+    const emaShortData: LineData[] = showEma ? data.map((d, i) => ({
       time: (d.time / 1000) as Time,
       value: emaShortValues[i],
-    }));
+    })) : [];
 
-    const emaLongData: LineData[] = data.map((d, i) => ({
+    const emaLongData: LineData[] = showEma ? data.map((d, i) => ({
       time: (d.time / 1000) as Time,
       value: emaLongValues[i],
-    }));
+    })) : [];
 
     emaShortSeriesRef.current?.setData(emaShortData);
     emaLongSeriesRef.current?.setData(emaLongData);
 
-    // MACD Data
     if (showMacd && macdChartRef.current) {
       const { macdLine, signalLine, histogram } = calculateMACD(closes, macdFast, macdSlow, macdSignal);
       
@@ -322,41 +361,135 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
 
     chartRef.current?.timeScale().fitContent();
-  }, [data, chartType, emaShort, emaLong, showMacd, macdFast, macdSlow, macdSignal]);
+  }, [data, chartType, emaShort, emaLong, showMacd, macdFast, macdSlow, macdSignal, showEma]);
+
+  const lastCandle = data[data.length - 1];
+  const displayCandle = legendData || lastCandle;
 
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex items-center gap-2 mb-2 px-2">
-        <button 
-          onClick={() => setChartType('CANDLE')}
-          className={`px-2 py-1 text-[10px] rounded border ${chartType === 'CANDLE' ? 'bg-sky-500/20 border-sky-500 text-sky-400' : 'border-white/10 text-white/40'}`}
-        >
-          Candles
-        </button>
-        <button 
-          onClick={() => setChartType('OHLC')}
-          className={`px-2 py-1 text-[10px] rounded border ${chartType === 'OHLC' ? 'bg-sky-500/20 border-sky-500 text-sky-400' : 'border-white/10 text-white/40'}`}
-        >
-          OHLC
-        </button>
-        <div className="flex items-center gap-2 ml-auto">
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-0.5 bg-[#38bdf8]" />
-            <span className="text-[10px] text-white/40">EMA {emaShort}</span>
+    <div className="w-full h-full flex flex-col relative group/chart">
+      {/* Chart Header / Controls */}
+      <div className="flex items-center justify-between mb-3 px-2">
+        <div className="flex items-center gap-3">
+          {/* Chart Type Switcher */}
+          <div className="flex bg-white/5 rounded-xl p-1 border border-white/10 shadow-inner">
+            <button 
+              onClick={() => setChartType('CANDLE')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all duration-200 ${chartType === 'CANDLE' ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
+            >
+              Candles
+            </button>
+            <button 
+              onClick={() => setChartType('OHLC')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all duration-200 ${chartType === 'OHLC' ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
+            >
+              OHLC
+            </button>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-0.5 bg-[#f472b6]" />
-            <span className="text-[10px] text-white/40">EMA {emaLong}</span>
+
+          <div className="h-6 w-px bg-white/10 mx-1" />
+
+          {/* EMA Toggle */}
+          <button 
+            onClick={() => setShowEma(!showEma)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 ${showEma ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-white/5 border-white/10 text-white/40'}`}
+          >
+            {showEma ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            <span className="text-[10px] font-bold uppercase tracking-wider">EMA</span>
+          </button>
+
+          {/* Settings Toggle */}
+          <button 
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-2 rounded-xl border transition-all duration-200 ${showSettings ? 'bg-sky-500/10 border-sky-500/20 text-sky-400' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/5'}`}
+          >
+            <Settings className={`w-4 h-4 ${showSettings ? 'animate-spin-slow' : ''}`} />
+          </button>
+
+          {/* EMA Config Inputs */}
+          {showSettings && (
+            <div className="flex items-center gap-4 ml-2 p-1.5 bg-white/5 border border-white/10 rounded-xl animate-in fade-in slide-in-from-left-2 duration-300">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#38bdf8] shadow-[0_0_8px_rgba(56,189,248,0.5)]" />
+                <input 
+                  type="number"
+                  value={emaShort}
+                  onChange={(e) => onEmaShortChange?.(e.target.value)}
+                  className="w-14 bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-sky-500/50 transition-colors"
+                  placeholder="Short"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#f472b6] shadow-[0_0_8px_rgba(244,114,182,0.5)]" />
+                <input 
+                  type="number"
+                  value={emaLong}
+                  onChange={(e) => onEmaLongChange?.(e.target.value)}
+                  className="w-14 bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-sky-500/50 transition-colors"
+                  placeholder="Long"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Legend / OHLC Display */}
+        {displayCandle && (
+          <div className="flex items-center gap-4 text-[10px] font-mono">
+            <div className="flex gap-3">
+              <span className="text-white/30 uppercase">O</span>
+              <span className="text-white/80">{displayCandle.open.toFixed(2)}</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-white/30 uppercase">H</span>
+              <span className="text-emerald-400">{displayCandle.high.toFixed(2)}</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-white/30 uppercase">L</span>
+              <span className="text-rose-400">{displayCandle.low.toFixed(2)}</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-white/30 uppercase">C</span>
+              <span className={displayCandle.close >= displayCandle.open ? 'text-emerald-400' : 'text-rose-400'}>
+                {displayCandle.close.toFixed(2)}
+              </span>
+            </div>
           </div>
+        )}
+      </div>
+
+      {/* Main Chart Container */}
+      <div className="flex-1 relative min-h-0">
+        <div ref={chartContainerRef} className="absolute inset-0 w-full h-full" />
+        
+        {/* Indicators Legend (Overlay) */}
+        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 pointer-events-none">
+          {showEma && (
+            <div className="flex flex-col gap-1.5 bg-black/40 backdrop-blur-sm p-2 rounded-lg border border-white/5">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-0.5 bg-[#38bdf8] rounded-full" />
+                <span className="text-[9px] font-bold text-white/40 uppercase tracking-tighter">EMA {emaShort}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-0.5 bg-[#f472b6] rounded-full" />
+                <span className="text-[9px] font-bold text-white/40 uppercase tracking-tighter">EMA {emaLong}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      <div ref={chartContainerRef} className="flex-[3] w-full" />
+
+      {/* MACD Section */}
       {showMacd && (
-        <div className="w-full h-px bg-white/5 my-2" />
-      )}
-      {showMacd && (
-        <div ref={macdContainerRef} className="flex-1 w-full" />
+        <div className="h-32 mt-4 relative border-t border-white/5 pt-4">
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-black/40 backdrop-blur-sm px-2 py-1 rounded border border-white/5 pointer-events-none">
+            <TrendingUp className="w-3 h-3 text-sky-400/50" />
+            <span className="text-[8px] font-bold text-white/30 uppercase tracking-widest">MACD ({macdFast}, {macdSlow}, {macdSignal})</span>
+          </div>
+          <div ref={macdContainerRef} className="w-full h-full" />
+        </div>
       )}
     </div>
   );
 };
+

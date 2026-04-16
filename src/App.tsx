@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Settings, 
@@ -12,6 +12,7 @@ import {
   Activity,
   Bot,
   ShieldCheck,
+  ShieldAlert,
   AlertCircle,
   AlertTriangle,
   Bell,
@@ -27,7 +28,14 @@ import {
   Calendar,
   History,
   Zap,
-  Layers
+  Layers,
+  Clock,
+  Wallet,
+  Key,
+  Lock,
+  Globe,
+  DollarSign,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -136,6 +144,22 @@ interface Account {
 
 const PRESETS_DATA = [
   {
+    name: 'Pro Scalper',
+    desc: 'Advanced scalping with 200 EMA trend filter and volume spike detection.',
+    params: {
+      strategy: 'SCALPING' as const,
+      tpBuyPct: '1.2',
+      tpSellPct: '1.2',
+      slPct: '0.6',
+      maxDuration: '10',
+      trailingStop: '15',
+      profitFloor: '0.4',
+      tpSlMode: 'PERCENTAGE' as const,
+      useVolumeSpike: true,
+      volumeSpikeThreshold: '20'
+    }
+  },
+  {
     name: 'Aggressive Scalp',
     desc: 'High frequency trading with tight stops and aggressive trailing.',
     params: {
@@ -147,7 +171,8 @@ const PRESETS_DATA = [
       maxDuration: '5',
       trailingStop: '10',
       profitFloor: '0.5',
-      strategy: 'EMA_CROSS' as const
+      strategy: 'EMA_CROSS' as const,
+      tpSlMode: 'PERCENTAGE' as const
     }
   },
   {
@@ -162,7 +187,8 @@ const PRESETS_DATA = [
       maxDuration: '60',
       trailingStop: '20',
       profitFloor: '1.0',
-      strategy: 'EMA_CROSS' as const
+      strategy: 'EMA_CROSS' as const,
+      tpSlMode: 'PERCENTAGE' as const
     }
   },
   {
@@ -178,7 +204,8 @@ const PRESETS_DATA = [
       slPct: '0.5',
       maxDuration: '15',
       trailingStop: '0',
-      profitFloor: '0'
+      profitFloor: '0',
+      tpSlMode: 'PERCENTAGE' as const
     }
   },
   {
@@ -345,6 +372,9 @@ const Accordion = ({ title, icon: Icon, children, isOpen, onToggle, tooltip }: {
   );
 };
 
+const DEFAULT_LEVERAGE = 10;
+const MIN_TRADE_USD = 5;
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('alpha_token') || '');
   const [username, setUsername] = useState('');
@@ -372,6 +402,7 @@ export default function App() {
   const [tradeVol, setTradeVol] = useState('10');
   const [crossCond, setCrossCond] = useState<'UP' | 'DOWN'>('UP');
   const [maxDuration, setMaxDuration] = useState('1');
+  const [useMaxDuration, setUseMaxDuration] = useState(true);
   const [trailingStop, setTrailingStop] = useState('5');
   const [useTrailingStop, setUseTrailingStop] = useState(true);
   const [profitFloorPct, setProfitFloorPct] = useState('0.5');
@@ -382,6 +413,8 @@ export default function App() {
   const [rsiOverbought, setRsiOverbought] = useState('70');
   const [rsiOversold, setRsiOversold] = useState('30');
   const [useMacdHistogramFilter, setUseMacdHistogramFilter] = useState(false);
+  const [useVolumeSpike, setUseVolumeSpike] = useState(false);
+  const [volumeSpikeThreshold, setVolumeSpikeThreshold] = useState('20'); // percentage
   const [showMacd, setShowMacd] = useState(false);
   const [macdFast, setMacdFast] = useState('12');
   const [macdSlow, setMacdSlow] = useState('26');
@@ -391,7 +424,41 @@ export default function App() {
   const [chartInterval, setChartInterval] = useState('1m');
   const [currentPrice, setCurrentPrice] = useState<string>('0.00');
   const [prevPrice, setPrevPrice] = useState<string>('0.00');
-  const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS' | 'PRESETS' | 'BACKTEST' | 'SETTINGS'>('BASIC');
+  const [globalAutoScalp, setGlobalAutoScalp] = useState(false);
+  const [scanInterval, setScanInterval] = useState('60'); // seconds
+  const [minChangePct, setMinChangePct] = useState('1.5'); // min 24h change to consider
+  const [maxLeverageMode, setMaxLeverageMode] = useState(false);
+  const [maxUsdtMode, setMaxUsdtMode] = useState(false);
+  const [scannedCoins, setScannedCoins] = useState<any[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [autoPilot, setAutoPilot] = useState(false);
+
+  const toggleAutoPilot = () => {
+    if (!autoPilot) {
+      // Enabling Auto Pilot
+      setAutoPilot(true);
+      setAutoMode(true);
+      setGlobalAutoScalp(true);
+      setMaxLeverageMode(true);
+      setMaxUsdtMode(true);
+      setStrategy('SCALPING');
+      setUseTrailingStop(true);
+      setTrailingStop('3'); 
+      setUseProfitFloor(true);
+      setProfitFloorPct('0.5');
+      setUseLiquidationProtection(true);
+      setLiveOrders(true);
+      addLog('Auto Pilot Mode Activated: Full market scanning and auto-trading enabled.', 'success');
+      addAlert('Auto Pilot Mode Activated', 'success');
+    } else {
+      setAutoPilot(false);
+      setAutoMode(false);
+      setGlobalAutoScalp(false);
+      addLog('Auto Pilot Mode Deactivated.', 'info');
+    }
+  };
+
+  const [openSection, setOpenSection] = useState<'BASIC' | 'RISK' | 'INDICATORS' | 'PRESETS' | 'BACKTEST' | 'SETTINGS' | 'SCANNER'>('BASIC');
   const [expandedSections, setExpandedSections] = useState<string[]>(['BASIC']);
   const toggleSection = (section: string) => {
     setExpandedSections(prev => 
@@ -409,7 +476,11 @@ export default function App() {
   const [liveOrders, setLiveOrders] = useState(false);
   const [tradeLimits, setTradeLimits] = useState({ min: 5, max: 10 });
   const [botLogs, setBotLogs] = useState<{ time: number; msg: string; type: 'info' | 'success' | 'error' }[]>([]);
-  const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION'>('EMA_CROSS');
+  const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION' | 'SCALPING'>('EMA_CROSS');
+  const [useLiquidationProtection, setUseLiquidationProtection] = useState(true);
+  const [liquidationThreshold, setLiquidationThreshold] = useState('5');
+  const [useMarketSentiment, setUseMarketSentiment] = useState(true);
+  const [scalpingMode, setScalpingMode] = useState(false);
   const [botStats, setBotStats] = useState({ trades: 0, wins: 0, losses: 0, totalPnl: 0 });
   const [alerts, setAlerts] = useState<{ id: string; msg: string; type: 'success' | 'error' | 'info'; time: number }[]>([]);
   const [useAlertSound, setUseAlertSound] = useState(true);
@@ -428,6 +499,31 @@ export default function App() {
   const [calcBalance, setCalcBalance] = useState('1000');
   const [calcRiskPct, setCalcRiskPct] = useState('1');
   const [calcRiskFixed, setCalcRiskFixed] = useState('10');
+
+  const walletSummary = useMemo(() => {
+    const enabledAccs = accounts.filter(a => a.enabled);
+    let totalFuturesBalance = 0;
+    let totalSpotBalance = 0;
+    let totalUnrealizedPnL = 0;
+    
+    enabledAccs.forEach(acc => {
+      if (acc.futures) {
+        totalFuturesBalance += acc.futures.walletBalance;
+        totalUnrealizedPnL += acc.futures.unrealizedProfit;
+      }
+      if (acc.spot) {
+        totalSpotBalance += acc.spot.dollarTotal;
+      }
+    });
+    
+    return {
+      total: totalFuturesBalance + totalSpotBalance,
+      futures: totalFuturesBalance,
+      spot: totalSpotBalance,
+      pnl: totalUnrealizedPnL,
+      accountCount: enabledAccs.length
+    };
+  }, [accounts]);
   const [calcRiskMode, setCalcRiskMode] = useState<'PERCENTAGE' | 'FIXED'>('PERCENTAGE');
   const [calcStopLoss, setCalcStopLoss] = useState('');
   const [calcEntryPrice, setCalcEntryPrice] = useState('');
@@ -547,7 +643,17 @@ export default function App() {
     quantity: string, 
     tp: string, 
     sl: string,
+    leverage: string,
     mode: 'PERCENTAGE' | 'FIXED'
+  } | null>(null);
+  const [closeConfirm, setCloseConfirm] = useState<{
+    accountId: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    amount: number;
+    pnl: number;
+    pnlPct: number;
+    reason: string;
   } | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const accountsRef = React.useRef<Account[]>(accounts);
@@ -666,6 +772,32 @@ export default function App() {
     }
     return () => clearInterval(timer);
   }, [token, autoMode, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpBuyPct, tpSellPct, slBuyPct, slSellPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacdHistogramFilter, macdFast, macdSlow, macdSignal, tpSlMode, tpBuyPrice, tpSellPrice, slBuyPrice, slSellPrice, useProfitFloor, useTrailingStop, maxDuration]);
+
+  useEffect(() => {
+    let interval: any;
+    if (token && (autoMode || globalAutoScalp || autoPilot)) {
+      runMarketScanner();
+      const speed = autoPilot ? 30 : parseInt(scanInterval);
+      interval = setInterval(runMarketScanner, speed * 1000);
+    }
+    return () => clearInterval(interval);
+  }, [token, autoMode, globalAutoScalp, autoPilot, scanInterval]);
+
+  const calculateMarketSentiment = (closes: number[]) => {
+    const rsi = calculateRSI(closes, 14);
+    const ema20 = calculateEMA(closes, 20);
+    const ema50 = calculateEMA(closes, 50);
+    const currentPrice = closes[closes.length - 1];
+
+    let score = 0;
+    if (currentPrice > ema20) score++;
+    if (ema20 > ema50) score++;
+    if (rsi > 50) score++;
+
+    if (score >= 2) return 'BULLISH';
+    if (score <= 1) return 'BEARISH';
+    return 'NEUTRAL';
+  };
 
   const calculateEMA = (data: number[], period: number) => {
     const k = 2 / (period + 1);
@@ -860,13 +992,14 @@ export default function App() {
           }
 
           // Trailing Stop Logic: Trigger if profit drops by X% from its peak
-          const tStop = useTrailingStop ? Number(trailingStop) : 0;
+          const tStop = (useTrailingStop || autoPilot) ? (autoPilot ? 2 : Number(trailingStop)) : 0;
           if (peak > 0 && tStop > 0) {
-            const dropAmount = peak * (tStop / 100);
+            const initialValue = Math.abs(p.amount) * p.entryPrice;
+            const dropAmount = initialValue * (tStop / 100);
             const threshold = peak - dropAmount;
             
             if (currentProfit < threshold) {
-              const msg = `Trailing stop triggered for ${p.symbol} on ${acc.label} (Peak: $${peak.toFixed(2)}, Current: $${currentProfit.toFixed(2)}, Drop: ${tStop}%)`;
+              const msg = `Trailing stop triggered for ${p.symbol} on ${acc.label} (Peak: $${peak.toFixed(2)}, Current: $${currentProfit.toFixed(2)}, Drop: ${tStop}% of pos)`;
               setStatus({ msg: `Auto: ${msg}`, ok: true });
               addLog(msg, 'success');
               addAlert(msg, 'success');
@@ -886,7 +1019,7 @@ export default function App() {
 
           // Profit Floor Logic: Trigger if profit drops below X% of initial trade value
           // This acts as a "Minimum Profit Lock" or "Breakeven Plus"
-          const pFloor = useProfitFloor ? Number(profitFloorPct) : 0;
+          const pFloor = (useProfitFloor || autoPilot) ? (autoPilot ? 0.3 : Number(profitFloorPct)) : 0;
           const initialValue = Math.abs(p.amount) * p.entryPrice;
           const floorThresholdUSDT = initialValue * (pFloor / 100);
           
@@ -906,6 +1039,37 @@ export default function App() {
             delete peakProfitRef.current[key];
             delete posStartTimeRef.current[key];
             continue;
+          }
+
+          // Liquidation Protection
+          if (useLiquidationProtection && p.liquidationPrice > 0) {
+            const liqPrice = p.liquidationPrice;
+            const markPrice = p.markPrice;
+            const threshold = Number(liquidationThreshold) / 100;
+            
+            let dist = 0;
+            if (p.amount > 0) { // Long
+              dist = (markPrice - liqPrice) / markPrice;
+            } else { // Short
+              dist = (liqPrice - markPrice) / markPrice;
+            }
+
+            if (dist <= threshold) {
+              const msg = `Liquidation Protection triggered for ${p.symbol} on ${acc.label} (Dist: ${(dist * 100).toFixed(2)}%)`;
+              setStatus({ msg: `Auto: ${msg}`, ok: true });
+              addLog(msg, 'error');
+              addAlert(msg, 'error');
+              setBotStats(prev => ({
+                ...prev,
+                trades: prev.trades + 1,
+                losses: prev.losses + 1,
+                totalPnl: prev.totalPnl + currentProfit
+              }));
+              await closePositionInternal(acc.id, p.symbol, 'Liquidation Protection', p);
+              delete peakProfitRef.current[key];
+              delete posStartTimeRef.current[key];
+              continue;
+            }
           }
 
           // Manual TP/SL Fallback Monitoring
@@ -987,9 +1151,10 @@ export default function App() {
           if (!posStartTimeRef.current[key]) {
             // Try to find start time from trades
             try {
-              const trades = await api(`/api/futures/trades?accountId=${acc.id}&symbol=${p.symbol}`);
+              const trades = await api(`/api/futures/trades?accountId=${encodeURIComponent(acc.id)}&symbol=${encodeURIComponent(p.symbol)}`);
               if (trades.length > 0) {
-                posStartTimeRef.current[key] = trades[0].time;
+                // Use the most recent trade time
+                posStartTimeRef.current[key] = trades[trades.length - 1].time;
               } else {
                 posStartTimeRef.current[key] = Date.now();
               }
@@ -1000,7 +1165,7 @@ export default function App() {
 
           const startTime = posStartTimeRef.current[key];
           const maxMin = Number(maxDuration);
-          if (startTime && maxMin > 0) {
+          if (useMaxDuration && startTime && maxMin > 0) {
             const elapsedMin = (Date.now() - startTime) / 60000;
             if (elapsedMin > maxMin) {
               const msg = `Max duration reached for ${p.symbol} on ${acc.label}`;
@@ -1040,8 +1205,9 @@ export default function App() {
         return;
       }
 
-      const klines = await api(`/api/futures/klines?symbol=${selectedSymbol}&interval=1m&limit=100`, { auth: false });
+      const klines = await api(`/api/futures/klines?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=250`, { auth: false });
       const closes = klines.map((k: any) => Number(k[4]));
+      const volumes = klines.map((k: any) => Number(k[5]));
       
       // Update current indicators for UI
       if (showMacd || useMacdHistogramFilter) {
@@ -1050,6 +1216,11 @@ export default function App() {
       
       let signal = false;
       let side: 'BUY' | 'SELL' = 'BUY';
+
+      // Common Indicators
+      const avgVol = volumes.slice(-20).reduce((a: number, b: number) => a + b, 0) / 20;
+      const currentVol = volumes[volumes.length - 1];
+      const volSpike = useVolumeSpike ? (currentVol > avgVol * (1 + Number(volumeSpikeThreshold) / 100)) : true;
 
       if (strategy === 'EMA_CROSS') {
         const shortP = Number(emaShort);
@@ -1063,21 +1234,46 @@ export default function App() {
         const prevLong = calculateEMA(prevCloses, longP);
 
         if (crossCond === 'UP') {
-          if (prevShort <= prevLong && eShort > eLong) signal = true;
+          if (prevShort <= prevLong && eShort > eLong && volSpike) signal = true;
           side = 'BUY';
         } else {
-          if (prevShort >= prevLong && eShort < eLong) signal = true;
+          if (prevShort >= prevLong && eShort < eLong && volSpike) signal = true;
           side = 'SELL';
         }
       } else if (strategy === 'RSI_REVERSION') {
         const rsiVal = calculateRSI(closes, Number(rsiPeriod));
-        if (rsiVal < Number(rsiOversold)) {
+        if (rsiVal < Number(rsiOversold) && volSpike) {
           signal = true;
           side = 'BUY';
-        } else if (rsiVal > Number(rsiOverbought)) {
+        } else if (rsiVal > Number(rsiOverbought) && volSpike) {
           signal = true;
           side = 'SELL';
         }
+      } else if (strategy === 'SCALPING') {
+        // Scalping: EMA 5/13 cross + RSI confirmation on 1m + EMA 200 Trend Filter + Volume Spike
+        const e5 = calculateEMA(closes, 5);
+        const e13 = calculateEMA(closes, 13);
+        const e200 = calculateEMA(closes, 200);
+        const rsi = calculateRSI(closes, 14);
+        
+        const prevCloses = closes.slice(0, -1);
+        const pE5 = calculateEMA(prevCloses, 5);
+        const pE13 = calculateEMA(prevCloses, 13);
+
+        if (pE5 <= pE13 && e5 > e13 && rsi < 60 && closes[closes.length - 1] > e200 && volSpike) {
+          signal = true;
+          side = 'BUY';
+        } else if (pE5 >= pE13 && e5 < e13 && rsi > 40 && closes[closes.length - 1] < e200 && volSpike) {
+          signal = true;
+          side = 'SELL';
+        }
+      }
+
+      // Market Sentiment Filter
+      if (signal && useMarketSentiment) {
+        const sentiment = calculateMarketSentiment(closes);
+        if (side === 'BUY' && sentiment === 'BEARISH') signal = false;
+        if (side === 'SELL' && sentiment === 'BULLISH') signal = false;
       }
 
       // RSI Confirmation (only for EMA_CROSS)
@@ -1169,6 +1365,7 @@ export default function App() {
           symbol: selectedSymbol,
           side,
           quantity: qty,
+          tpSlMode
         };
 
         if (tpSlMode === 'PERCENTAGE') {
@@ -1190,14 +1387,105 @@ export default function App() {
     }
   };
 
+  const runMarketScanner = async () => {
+    if (isScanning) return;
+    setIsScanning(true);
+    try {
+      const res = await api('/api/futures/ticker24h');
+      if (Array.isArray(res)) {
+        const minChange = parseFloat(minChangePct);
+        const filtered = res
+          .filter((t: any) => t.symbol.endsWith('USDT'))
+          .map((t: any) => ({
+            symbol: t.symbol,
+            priceChangePercent: parseFloat(t.priceChangePercent),
+            lastPrice: parseFloat(t.lastPrice),
+            volume: parseFloat(t.quoteVolume),
+            highPrice: parseFloat(t.highPrice),
+            lowPrice: parseFloat(t.lowPrice)
+          }))
+          .filter((t: any) => Math.abs(t.priceChangePercent) >= minChange)
+          .sort((a: any, b: any) => b.volume - a.volume);
+        
+        setScannedCoins(filtered.slice(0, 20));
+        
+        if (globalAutoScalp || autoPilot) {
+          // Pick top trending coins to trade if not already in position
+          const topTrending = filtered.slice(0, autoPilot ? 8 : 5);
+          for (const coin of topTrending) {
+            const side = coin.priceChangePercent > 0 ? 'BUY' : 'SELL';
+            // Check if we already have a position in this coin
+            const hasPos = accounts.some(a => a.futures?.positions?.some(p => p.symbol === coin.symbol));
+            if (!hasPos) {
+              await executeGlobalTrade(coin.symbol, side);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Market Scanner Error:', err);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const executeGlobalTrade = async (symbol: string, side: 'BUY' | 'SELL') => {
+    try {
+      // 1. Get Max Leverage for this symbol
+      let leverage = DEFAULT_LEVERAGE;
+      if (maxLeverageMode) {
+        try {
+          const brackets = await api(`/api/futures/leverage-brackets?symbol=${symbol}`);
+          if (Array.isArray(brackets) && brackets.length > 0) {
+            leverage = brackets[0].brackets[0].initialLeverage;
+          }
+        } catch (e) {
+          console.warn(`Could not fetch max leverage for ${symbol}, using default ${DEFAULT_LEVERAGE}`);
+        }
+      }
+
+      // 2. Calculate Max USDT
+      let tradeAmount = Number(tradeVol);
+      if (maxUsdtMode || autoPilot) {
+        const totalAvailable = walletSummary.futures;
+        const slots = autoPilot ? 8 : 5;
+        tradeAmount = (totalAvailable * 0.8) / slots;
+        if (tradeAmount < MIN_TRADE_USD) tradeAmount = MIN_TRADE_USD;
+        if (tradeAmount > 100) tradeAmount = 100; 
+      }
+
+      const msg = `${autoPilot ? 'AUTO PILOT' : 'Global Auto Scalp'}: Opening ${side} on ${symbol} with ${leverage}x leverage ($${tradeAmount.toFixed(2)})`;
+      addLog(msg, 'info');
+      
+      const body: any = {
+        symbol,
+        side,
+        notional: tradeAmount,
+        tpPct: autoPilot ? 1.5 : Number(tpBuyPct), 
+        slPct: autoPilot ? 1.0 : Number(slBuyPct),
+        tpSlMode: 'PERCENTAGE'
+      };
+
+      await api('/api/futures/trade', {
+        method: 'POST',
+        body
+      });
+      
+      addAlert(`Opened ${side} trade on ${symbol}`, 'success');
+    } catch (err: any) {
+      console.error(`Global Trade Failed for ${symbol}:`, err.message);
+    }
+  };
+
   const runBacktest = async () => {
     setBacktestLoading(true);
     setBacktestResults(null);
     try {
       const limit = Number(backtestDays) * 24 * 60; // 1m candles
-      const klines = await api(`/api/futures/klines?symbol=${selectedSymbol}&interval=1m&limit=${Math.min(limit, 1500)}`, { auth: false });
+      const klines = await api(`/api/futures/klines?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=${Math.min(limit, 1500)}`, { auth: false });
       
       const closes = klines.map((k: any) => Number(k[4]));
+      const volumes = klines.map((k: any) => Number(k[5]));
       const times = klines.map((k: any) => Number(k[0]));
       
       const trades: any[] = [];
@@ -1208,17 +1496,14 @@ export default function App() {
 
       const shortP = Number(emaShort);
       const longP = Number(emaLong);
-      const tpBuy = Number(tpBuyPct);
-      const tpSell = Number(tpSellPct);
-      const slBuy = Number(slBuyPct);
-      const slSell = Number(slSellPct);
       const pFloor = useProfitFloor ? Number(profitFloorPct) : 0;
       const tStop = useTrailingStop ? Number(trailingStop) : 0;
       const maxMin = Number(maxDuration);
 
-      // Start from index 100 to have enough data for indicators
-      for (let i = 100; i < closes.length; i++) {
+      // Start from index 200 to have enough data for indicators (including EMA 200)
+      for (let i = 200; i < closes.length; i++) {
         const subCloses = closes.slice(0, i + 1);
+        const subVolumes = volumes.slice(0, i + 1);
         const currentPrice = closes[i];
         const currentTime = times[i];
 
@@ -1236,14 +1521,28 @@ export default function App() {
           let closeReason = '';
 
           // TP/SL
-          const sl = currentPos.side === 'BUY' ? slBuy : slSell;
-          const tp = currentPos.side === 'BUY' ? tpBuy : tpSell;
-          if (tp > 0 && pnlPct >= tp) closeReason = 'Take Profit';
-          else if (sl > 0 && pnlPct <= -sl) closeReason = 'Stop Loss';
+          if (tpSlMode === 'PERCENTAGE') {
+            const sl = currentPos.side === 'BUY' ? Number(slBuyPct) : Number(slSellPct);
+            const tp = currentPos.side === 'BUY' ? Number(tpBuyPct) : Number(tpSellPct);
+            if (tp > 0 && pnlPct >= tp) closeReason = 'Take Profit';
+            else if (sl > 0 && pnlPct <= -sl) closeReason = 'Stop Loss';
+          } else {
+            const tpPrice = currentPos.side === 'BUY' ? Number(tpBuyPrice) : Number(tpSellPrice);
+            const slPrice = currentPos.side === 'BUY' ? Number(slBuyPrice) : Number(slSellPrice);
+            
+            if (currentPos.side === 'BUY') {
+              if (tpPrice > 0 && currentPrice >= tpPrice) closeReason = 'Take Profit';
+              else if (slPrice > 0 && currentPrice <= slPrice) closeReason = 'Stop Loss';
+            } else {
+              if (tpPrice > 0 && currentPrice <= tpPrice) closeReason = 'Take Profit';
+              else if (slPrice > 0 && currentPrice >= slPrice) closeReason = 'Stop Loss';
+            }
+          }
           
           // Trailing Stop
           if (!closeReason && currentPos.peakProfit > 0 && tStop > 0) {
-            const threshold = currentPos.peakProfit - (currentPos.peakProfit * (tStop / 100));
+            const initialValue = Number(tradeVol);
+            const threshold = currentPos.peakProfit - (initialValue * (tStop / 100));
             if (currentProfit < threshold) closeReason = 'Trailing Stop';
           }
 
@@ -1256,7 +1555,7 @@ export default function App() {
           }
 
           // Max Duration
-          if (!closeReason && maxMin > 0) {
+          if (!closeReason && useMaxDuration && maxMin > 0) {
             const elapsed = (currentTime - currentPos.entryTime) / 60000;
             if (elapsed > maxMin) closeReason = 'Max Duration';
           }
@@ -1280,6 +1579,10 @@ export default function App() {
           let signal = false;
           let side: 'BUY' | 'SELL' = 'BUY';
 
+          const avgVol = subVolumes.slice(-20).reduce((a: number, b: number) => a + b, 0) / 20;
+          const currentVol = subVolumes[subVolumes.length - 1];
+          const volSpike = currentVol > avgVol * 1.2;
+
           if (strategy === 'EMA_CROSS') {
             const eShort = calculateEMA(subCloses, shortP);
             const eLong = calculateEMA(subCloses, longP);
@@ -1288,18 +1591,35 @@ export default function App() {
             const prevLong = calculateEMA(prevCloses, longP);
 
             if (crossCond === 'UP') {
-              if (prevShort <= prevLong && eShort > eLong) signal = true;
+              if (prevShort <= prevLong && eShort > eLong && volSpike) signal = true;
               side = 'BUY';
             } else {
-              if (prevShort >= prevLong && eShort < eLong) signal = true;
+              if (prevShort >= prevLong && eShort < eLong && volSpike) signal = true;
               side = 'SELL';
             }
           } else if (strategy === 'RSI_REVERSION') {
             const rsiVal = calculateRSI(subCloses, Number(rsiPeriod));
-            if (rsiVal < Number(rsiOversold)) {
+            if (rsiVal < Number(rsiOversold) && volSpike) {
               signal = true;
               side = 'BUY';
-            } else if (rsiVal > Number(rsiOverbought)) {
+            } else if (rsiVal > Number(rsiOverbought) && volSpike) {
+              signal = true;
+              side = 'SELL';
+            }
+          } else if (strategy === 'SCALPING') {
+            const e5 = calculateEMA(subCloses, 5);
+            const e13 = calculateEMA(subCloses, 13);
+            const e200 = calculateEMA(subCloses, 200);
+            const rsi = calculateRSI(subCloses, 14);
+            
+            const prevCloses = subCloses.slice(0, -1);
+            const pE5 = calculateEMA(prevCloses, 5);
+            const pE13 = calculateEMA(prevCloses, 13);
+
+            if (pE5 <= pE13 && e5 > e13 && rsi < 60 && currentPrice > e200 && volSpike) {
+              signal = true;
+              side = 'BUY';
+            } else if (pE5 >= pE13 && e5 < e13 && rsi > 40 && currentPrice < e200 && volSpike) {
               signal = true;
               side = 'SELL';
             }
@@ -1404,25 +1724,29 @@ export default function App() {
         quantity: qty, 
         tp: tpSlMode === 'PERCENTAGE' ? tp : tpPrice, 
         sl: tpSlMode === 'PERCENTAGE' ? sl : slPrice,
+        leverage: String(DEFAULT_LEVERAGE),
         mode: tpSlMode
       });
       return;
     }
 
+    if (loading) return;
     setLoading(true);
     try {
       const body: any = {
-        symbol: selectedSymbol,
+        symbol: tradeConfirm?.symbol || selectedSymbol,
         side,
         quantity: tradeConfirm?.quantity,
+        leverage: Number(tradeConfirm?.leverage || DEFAULT_LEVERAGE),
+        tpSlMode: tradeConfirm?.mode || tpSlMode
       };
 
-      if (tpSlMode === 'PERCENTAGE') {
-        body.tpPct = Number(tp);
-        body.slPct = Number(sl);
+      if (body.tpSlMode === 'PERCENTAGE') {
+        body.tpPct = Number(tradeConfirm?.tp);
+        body.slPct = Number(tradeConfirm?.sl);
       } else {
-        if (tpPrice) body.tpPrice = Number(tpPrice);
-        if (slPrice) body.slPrice = Number(slPrice);
+        if (tradeConfirm?.tp) body.tpPrice = Number(tradeConfirm?.tp);
+        if (tradeConfirm?.sl) body.slPrice = Number(tradeConfirm?.sl);
       }
 
       const res = await api('/api/futures/trade', {
@@ -1659,7 +1983,25 @@ export default function App() {
   };
 
   const closePosition = async (accountId: string, symbol: string, reason: string = 'Manual Close') => {
-    if (!confirm(`Close ${symbol} position?`)) return;
+    const acc = accounts.find(a => a.id === accountId);
+    const pos = acc?.futures?.positions?.find(p => p.symbol === symbol);
+    if (!pos) return;
+
+    setCloseConfirm({
+      accountId,
+      symbol,
+      side: pos.amount > 0 ? 'BUY' : 'SELL',
+      amount: Math.abs(pos.amount),
+      pnl: pos.unrealizedProfit,
+      pnlPct: pos.pnlPct,
+      reason
+    });
+  };
+
+  const confirmClosePosition = async () => {
+    if (!closeConfirm) return;
+    const { accountId, symbol, reason } = closeConfirm;
+    
     setLoading(true);
     try {
       const acc = accounts.find(a => a.id === accountId);
@@ -1684,6 +2026,7 @@ export default function App() {
       await api('/api/futures/close', { method: 'POST', body: { accountId, symbol } });
       setStatus({ msg: `Closed ${symbol} position`, ok: true });
       refreshAll();
+      setCloseConfirm(null);
     } catch (err: any) {
       setStatus({ msg: err.message, ok: false });
     } finally {
@@ -1785,6 +2128,17 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3">
             <button 
+              onClick={toggleAutoPilot}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
+                autoPilot 
+                  ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' 
+                  : 'bg-white/5 text-white/40 hover:bg-white/10'
+              }`}
+            >
+              <Zap className={`w-4 h-4 ${autoPilot ? 'fill-current' : ''}`} />
+              {autoPilot ? 'AUTO PILOT ON' : 'START AUTO PILOT'}
+            </button>
+            <button 
               onClick={toggleLiveOrders}
               disabled={loading}
               className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all ${
@@ -1832,6 +2186,79 @@ export default function App() {
             Trade History
           </button>
         </nav>
+
+        {/* Main Wallet Summary */}
+        {activeView === 'DASHBOARD' && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-4"
+          >
+            <div className="bg-gradient-to-br from-sky-500/10 to-transparent border border-sky-500/20 rounded-2xl p-6 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Wallet className="w-16 h-16" />
+              </div>
+              <div className="relative z-10 space-y-2">
+                <div className="flex items-center gap-2 text-sky-400">
+                  <Wallet className="w-4 h-4" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Main Wallet Balance</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-3xl font-mono font-bold tracking-tight">
+                    {walletSummary.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </h2>
+                  <span className="text-sm text-white/40 font-bold">USDT</span>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <div className="flex items-center gap-1 text-[10px] text-white/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Direct Binance Integration
+                  </div>
+                  <div className="text-[10px] text-white/40">
+                    {walletSummary.accountCount} Active Accounts
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-2">
+              <div className="flex items-center gap-2 text-white/40">
+                <TrendingUp className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Total Unrealized PnL</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <h2 className={`text-3xl font-mono font-bold tracking-tight ${walletSummary.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {walletSummary.pnl >= 0 ? '+' : ''}{walletSummary.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </h2>
+                <span className="text-sm text-white/40 font-bold">USDT</span>
+              </div>
+              <p className="text-[10px] text-white/30">Combined profit/loss across all futures positions</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Asset Allocation</p>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-xs font-mono font-bold text-sky-400">${walletSummary.futures.toFixed(2)}</p>
+                      <p className="text-[8px] text-white/20 uppercase">Futures</p>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <p className="text-xs font-mono font-bold text-amber-400">${walletSummary.spot.toFixed(2)}</p>
+                      <p className="text-[8px] text-white/20 uppercase">Spot</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-full border-4 border-white/5 flex items-center justify-center relative">
+                  <div className="absolute inset-0 rounded-full border-4 border-sky-500/30 border-t-sky-500" style={{ transform: `rotate(${(walletSummary.futures / (walletSummary.total || 1)) * 360}deg)` }} />
+                  <BarChart2 className="w-5 h-5 text-white/20" />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {activeView === 'DASHBOARD' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1984,6 +2411,23 @@ export default function App() {
                                         <span className="w-1 h-1 rounded-full bg-sky-500 animate-pulse" />
                                         <span className="text-[8px] text-sky-500/50 uppercase font-bold tracking-tighter">Live PnL</span>
                                       </span>
+                                      {posStartTimeRef.current[`${acc.id}_${p.symbol}`] && (
+                                        <div className="flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                                          <Clock className="w-2.5 h-2.5 text-white/20" />
+                                          <span className="text-[8px] font-mono text-white/40">
+                                            {formatDuration(Date.now() - posStartTimeRef.current[`${acc.id}_${p.symbol}`])}
+                                          </span>
+                                          {useMaxDuration && Number(maxDuration) > 0 && (
+                                            <span className={`text-[8px] font-bold ml-1 ${
+                                              (Date.now() - posStartTimeRef.current[`${acc.id}_${p.symbol}`]) / 60000 > Number(maxDuration) * 0.8 
+                                                ? 'text-amber-400' 
+                                                : 'text-white/20'
+                                            }`}>
+                                              / {maxDuration}m
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                       {peakProfitRef.current[`${acc.id}_${p.symbol}`] > 0 && (
                                         <div className="flex flex-col items-end">
                                           <span className="text-[8px] font-mono text-white/30">
@@ -2089,6 +2533,8 @@ export default function App() {
                     data={chartData} 
                     emaShort={Number(emaShort)}
                     emaLong={Number(emaLong)}
+                    onEmaShortChange={setEmaShort}
+                    onEmaLongChange={setEmaLong}
                     showMacd={showMacd} 
                     macdFast={Number(macdFast)}
                     macdSlow={Number(macdSlow)}
@@ -2393,6 +2839,9 @@ export default function App() {
                               placeholder={currentPrice}
                               className={`w-full bg-black/40 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors ${slBuyPrice && Number(slBuyPrice) > 0 && ((Number(currentPrice) - Number(slBuyPrice)) / Number(currentPrice)) * 100 > 15 ? 'border-red-500/50 text-red-400' : 'border-white/10'}`}
                             />
+                            {slBuyPrice && Number(slBuyPrice) > 0 && ((Number(currentPrice) - Number(slBuyPrice)) / Number(currentPrice)) * 100 > 15 && (
+                              <p className="text-[8px] text-red-400 mt-1 ml-1">Exceeds 15% risk threshold</p>
+                            )}
                           </div>
                           <div>
                             <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
@@ -2408,6 +2857,9 @@ export default function App() {
                               placeholder={currentPrice}
                               className={`w-full bg-black/40 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors ${slSellPrice && Number(slSellPrice) > 0 && ((Number(slSellPrice) - Number(currentPrice)) / Number(currentPrice)) * 100 > 15 ? 'border-red-500/50 text-red-400' : 'border-white/10'}`}
                             />
+                            {slSellPrice && Number(slSellPrice) > 0 && ((Number(slSellPrice) - Number(currentPrice)) / Number(currentPrice)) * 100 > 15 && (
+                              <p className="text-[8px] text-red-400 mt-1 ml-1">Exceeds 15% risk threshold</p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -2466,6 +2918,7 @@ export default function App() {
                       >
                         <option value="EMA_CROSS">EMA Crossover</option>
                         <option value="RSI_REVERSION">RSI Mean Reversion</option>
+                        <option value="SCALPING">Scalping (Fast EMA/RSI)</option>
                       </select>
                     </div>
                   </div>
@@ -2487,19 +2940,20 @@ export default function App() {
 
                 <div className="space-y-4">
                   {/* Section Tabs */}
-                  <div className="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
-                    {(['BASIC', 'RISK', 'INDICATORS', 'PRESETS', 'BACKTEST', 'SETTINGS'] as const).map((s) => (
+                  <div className="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/5 overflow-x-auto no-scrollbar">
+                    {(['BASIC', 'RISK', 'INDICATORS', 'PRESETS', 'BACKTEST', 'SCANNER', 'SETTINGS'] as const).map((s) => (
                       <Tooltip key={s} text={
                         s === 'BASIC' ? 'Core strategy parameters like EMA periods and entry conditions.' :
                         s === 'RISK' ? 'Risk management settings including max duration and trailing stop.' :
                         s === 'INDICATORS' ? 'Advanced technical filters like RSI and MACD confirmation.' :
                         s === 'PRESETS' ? 'Quickly apply pre-configured strategy templates.' :
                         s === 'BACKTEST' ? 'Test your current strategy against historical data.' :
+                        s === 'SCANNER' ? 'Scan the full market for profitable trending coins.' :
                         'Global application settings and live trading controls.'
                       }>
                         <button
                           onClick={() => setOpenSection(s)}
-                          className={`w-full py-1.5 text-[9px] font-bold rounded-lg transition-all ${
+                          className={`flex-1 min-w-[50px] py-1.5 text-[9px] font-bold rounded-lg transition-all ${
                             openSection === s 
                               ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' 
                               : 'text-white/40 hover:text-white/60 hover:bg-white/5'
@@ -2540,6 +2994,131 @@ export default function App() {
                             <p className="text-[9px] text-amber-400 leading-relaxed">
                               <span className="font-bold">Warning:</span> Enabling live trading will execute real orders with your connected accounts. Ensure your strategy and risk parameters are correct.
                             </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                    {openSection === 'SCANNER' && (
+                      <motion.div
+                        key="scanner"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        className="space-y-4"
+                      >
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Globe className="w-4 h-4 text-sky-400" />
+                              <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Global Auto Scalp</span>
+                            </div>
+                            <button 
+                              onClick={() => setGlobalAutoScalp(!globalAutoScalp)}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${globalAutoScalp ? 'bg-sky-500' : 'bg-white/10'}`}
+                            >
+                              <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${globalAutoScalp ? 'translate-x-5' : 'translate-x-1'}`} />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[8px] text-white/30 uppercase mb-1 ml-1">Scan Interval (s)</label>
+                              <input 
+                                type="number" 
+                                value={scanInterval}
+                                onChange={(e) => setScanInterval(e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] focus:outline-none focus:border-sky-500/50"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] text-white/30 uppercase mb-1 ml-1">Min 24h Change (%)</label>
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                value={minChangePct}
+                                onChange={(e) => setMinChangePct(e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] focus:outline-none focus:border-sky-500/50"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={maxLeverageMode} 
+                                onChange={e => setMaxLeverageMode(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Maximum Leverage Mode</span>
+                              <Tooltip text="Automatically use the maximum allowed leverage for each symbol.">
+                                <Zap className="w-3 h-3 text-amber-400" />
+                              </Tooltip>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={maxUsdtMode} 
+                                onChange={e => setMaxUsdtMode(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Maximum USDT Mode</span>
+                              <Tooltip text="Use a larger portion of available balance for trades.">
+                                <DollarSign className="w-3 h-3 text-emerald-400" />
+                              </Tooltip>
+                            </label>
+                          </div>
+
+                          <button 
+                            onClick={runMarketScanner}
+                            disabled={isScanning}
+                            className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 font-bold py-2 rounded-lg text-[10px] transition-all flex items-center justify-center gap-2"
+                          >
+                            {isScanning ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                            Manual Market Scan
+                          </button>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                          <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex items-center justify-between">
+                            <span className="text-[9px] font-bold text-white/60 uppercase">Profitable Coins (24h Change)</span>
+                            <span className="text-[9px] text-white/40">{scannedCoins.length} found</span>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                            {scannedCoins.length > 0 ? (
+                              <div className="divide-y divide-white/5">
+                                {scannedCoins.map((coin, idx) => (
+                                  <div key={idx} className="p-3 flex items-center justify-between hover:bg-white/5 transition-colors">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold">{coin.symbol}</span>
+                                      <span className={`text-[9px] font-mono ${coin.priceChangePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {coin.priceChangePercent >= 0 ? '+' : ''}{coin.priceChangePercent.toFixed(2)}%
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <div className="text-right">
+                                        <p className="text-[9px] font-mono text-white/80">${coin.lastPrice.toFixed(coin.lastPrice < 1 ? 4 : 2)}</p>
+                                        <p className="text-[7px] text-white/20 uppercase">Vol: ${(coin.volume / 1000000).toFixed(1)}M</p>
+                                      </div>
+                                      <button 
+                                        onClick={() => {
+                                          setSelectedSymbol(coin.symbol);
+                                          setMarket('FUTURES');
+                                        }}
+                                        className="p-1.5 bg-sky-500/10 text-sky-400 rounded-md hover:bg-sky-500/20 transition-all"
+                                      >
+                                        <ArrowRight className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-8 text-center text-white/20">
+                                <Search className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                                <p className="text-[10px]">No coins found. Try scanning.</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </motion.div>
@@ -2695,6 +3274,7 @@ export default function App() {
                               onClick={() => {
                                 if (preset.params.emaShort) setEmaShort(preset.params.emaShort);
                                 if (preset.params.emaLong) setEmaLong(preset.params.emaLong);
+                                if (preset.params.tpSlMode) setTpSlMode(preset.params.tpSlMode);
                                 if (preset.params.tpBuyPct) setTpBuyPct(preset.params.tpBuyPct);
                                 if (preset.params.tpSellPct) setTpSellPct(preset.params.tpSellPct);
                                 if (preset.params.slPct) {
@@ -2702,7 +3282,10 @@ export default function App() {
                                   setSlBuyPct(preset.params.slPct);
                                   setSlSellPct(preset.params.slPct);
                                 }
-                                if (preset.params.maxDuration) setMaxDuration(preset.params.maxDuration);
+                                if (preset.params.maxDuration) {
+                                  setMaxDuration(preset.params.maxDuration);
+                                  setUseMaxDuration(Number(preset.params.maxDuration) > 0);
+                                }
                                 if (preset.params.trailingStop) {
                                   setTrailingStop(preset.params.trailingStop);
                                   setUseTrailingStop(Number(preset.params.trailingStop) > 0);
@@ -2715,6 +3298,10 @@ export default function App() {
                                 if (preset.params.rsiPeriod) setRsiPeriod(preset.params.rsiPeriod);
                                 if (preset.params.rsiOversold) setRsiOversold(preset.params.rsiOversold);
                                 if (preset.params.rsiOverbought) setRsiOverbought(preset.params.rsiOverbought);
+                                // @ts-ignore
+                                if (preset.params.useVolumeSpike !== undefined) setUseVolumeSpike(preset.params.useVolumeSpike);
+                                // @ts-ignore
+                                if (preset.params.volumeSpikeThreshold) setVolumeSpikeThreshold(preset.params.volumeSpikeThreshold);
                                 setStatus({ msg: `${preset.name} preset applied`, ok: true });
                               }}
                               className="group flex flex-col items-start p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-left"
@@ -2785,116 +3372,6 @@ export default function App() {
                             <option value="DOWN">Short crosses Long DOWN (SELL)</option>
                           </select>
                         </div>
-                      </motion.div>
-                    )}
-
-                    {openSection === 'RISK' && (
-                      <motion.div
-                        key="risk"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 10 }}
-                        className="space-y-3"
-                      >
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
-                              Max Duration (min)
-                              <Tooltip text="Defines the maximum time (in minutes) a position can remain open before being automatically closed.">
-                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
-                              </Tooltip>
-                            </label>
-                            <input 
-                              type="number" 
-                              value={maxDuration}
-                              onChange={(e) => setMaxDuration(e.target.value)}
-                              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={useAlertSound} 
-                                onChange={e => setUseAlertSound(e.target.checked)} 
-                                className="rounded border-white/10 bg-black/40 text-sky-500" 
-                              />
-                              <span className="text-[10px] font-bold text-white/60">Audible Alerts</span>
-                              <Tooltip text="Play a sound when a trade is closed by TP, SL, or Trailing Stop.">
-                                {useAlertSound ? <Bell className="w-3 h-3 text-sky-400" /> : <BellOff className="w-3 h-3 text-white/20" />}
-                              </Tooltip>
-                            </label>
-                          </div>
-                        </div>
-
-                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={useTrailingStop} 
-                                onChange={e => setUseTrailingStop(e.target.checked)} 
-                                className="rounded border-white/10 bg-black/40 text-sky-500" 
-                              />
-                              <span className="text-[10px] font-bold text-white/60">Trailing Stop Loss</span>
-                              <Tooltip text="Percentage of peak profit to trail. If profit drops by this much from its peak, the trade closes.">
-                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
-                              </Tooltip>
-                            </label>
-                          </div>
-                          {useTrailingStop && (
-                            <div className="pl-6">
-                              <label className="flex items-center gap-1.5 text-[8px] text-white/30 uppercase mb-1">
-                                Trailing Percentage (%)
-                                <Tooltip text="The percentage drop from peak profit that triggers a close.">
-                                  <Info className="w-2.5 h-2.5" />
-                                </Tooltip>
-                              </label>
-                              <input 
-                                type="number" 
-                                value={trailingStop}
-                                onChange={(e) => setTrailingStop(e.target.value)}
-                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50 transition-colors"
-                              />
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={useProfitFloor} 
-                                onChange={e => setUseProfitFloor(e.target.checked)} 
-                                className="rounded border-white/10 bg-black/40 text-sky-500" 
-                              />
-                              <span className="text-[10px] font-bold text-white/60">Profit Floor</span>
-                              <Tooltip text="Closes the position if unrealized profit drops below this percentage of the initial trade value. Only activates once profit has exceeded this threshold.">
-                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
-                              </Tooltip>
-                            </label>
-                          </div>
-                          {useProfitFloor && (
-                            <div className="pl-6">
-                              <label className="flex items-center gap-1.5 text-[8px] text-white/30 uppercase mb-1">
-                                Floor Threshold (%)
-                                <Tooltip text="The percentage of initial trade value to lock in as profit.">
-                                  <Info className="w-2.5 h-2.5" />
-                                </Tooltip>
-                              </label>
-                              <input 
-                                type="number" 
-                                value={profitFloorPct}
-                                onChange={(e) => setProfitFloorPct(e.target.value)}
-                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50 transition-colors"
-                              />
-                            </div>
-                          )}
-                        </div>
 
                         <div className="space-y-3 pt-2 border-t border-white/5">
                           <div className="flex items-center justify-between mb-2">
@@ -2902,18 +3379,22 @@ export default function App() {
                               TP/SL Mode
                             </label>
                             <div className="flex bg-black/40 p-1 rounded-lg border border-white/10">
-                              <button
-                                onClick={() => setTpSlMode('PERCENTAGE')}
-                                className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all ${tpSlMode === 'PERCENTAGE' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-white/40 hover:text-white/60'}`}
-                              >
-                                % Pct
-                              </button>
-                              <button
-                                onClick={() => setTpSlMode('FIXED')}
-                                className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all ${tpSlMode === 'FIXED' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-white/40 hover:text-white/60'}`}
-                              >
-                                $ Fixed
-                              </button>
+                              <Tooltip text="Set Take Profit and Stop Loss as a percentage of the entry price.">
+                                <button
+                                  onClick={() => setTpSlMode('PERCENTAGE')}
+                                  className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all ${tpSlMode === 'PERCENTAGE' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-white/40 hover:text-white/60'}`}
+                                >
+                                  % Pct
+                                </button>
+                              </Tooltip>
+                              <Tooltip text="Set Take Profit and Stop Loss as specific price targets.">
+                                <button
+                                  onClick={() => setTpSlMode('FIXED')}
+                                  className={`px-2 py-1 text-[9px] font-bold rounded-md transition-all ${tpSlMode === 'FIXED' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-white/40 hover:text-white/60'}`}
+                                >
+                                  $ Fixed
+                                </button>
+                              </Tooltip>
                             </div>
                           </div>
 
@@ -2989,7 +3470,7 @@ export default function App() {
                                 </label>
                                 <input 
                                   type="number" 
-                                  placeholder="e.g. 65000"
+                                  placeholder={currentPrice}
                                   value={tpBuyPrice}
                                   onChange={(e) => setTpBuyPrice(e.target.value)}
                                   className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -3004,7 +3485,7 @@ export default function App() {
                                 </label>
                                 <input 
                                   type="number" 
-                                  placeholder="e.g. 63000"
+                                  placeholder={currentPrice}
                                   value={tpSellPrice}
                                   onChange={(e) => setTpSellPrice(e.target.value)}
                                   className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -3019,11 +3500,14 @@ export default function App() {
                                 </label>
                                 <input 
                                   type="number" 
-                                  placeholder="e.g. 63500"
+                                  placeholder={currentPrice}
                                   value={slBuyPrice}
                                   onChange={(e) => setSlBuyPrice(e.target.value)}
                                   className={`w-full bg-black/40 border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors ${slBuyPrice && Number(slBuyPrice) > 0 && ((Number(currentPrice) - Number(slBuyPrice)) / Number(currentPrice)) * 100 > 15 ? 'border-red-500/50 text-red-400' : 'border-white/10'}`}
                                 />
+                                {slBuyPrice && Number(slBuyPrice) > 0 && ((Number(currentPrice) - Number(slBuyPrice)) / Number(currentPrice)) * 100 > 15 && (
+                                  <p className="text-[8px] text-red-400 mt-1 ml-1">Exceeds 15% risk threshold</p>
+                                )}
                               </div>
                               <div>
                                 <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
@@ -3034,12 +3518,253 @@ export default function App() {
                                 </label>
                                 <input 
                                   type="number" 
-                                  placeholder="e.g. 64500"
+                                  placeholder={currentPrice}
                                   value={slSellPrice}
                                   onChange={(e) => setSlSellPrice(e.target.value)}
                                   className={`w-full bg-black/40 border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors ${slSellPrice && Number(slSellPrice) > 0 && ((Number(slSellPrice) - Number(currentPrice)) / Number(currentPrice)) * 100 > 15 ? 'border-red-500/50 text-red-400' : 'border-white/10'}`}
                                 />
+                                {slSellPrice && Number(slSellPrice) > 0 && ((Number(slSellPrice) - Number(currentPrice)) / Number(currentPrice)) * 100 > 15 && (
+                                  <p className="text-[8px] text-red-400 mt-1 ml-1">Exceeds 15% risk threshold</p>
+                                )}
                               </div>
+                            </div>
+                          )}
+
+                          {/* Risk/Reward Analysis Summary */}
+                          <div className="mt-4 p-3 bg-white/5 border border-white/10 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] text-white/40 uppercase font-bold tracking-wider">Risk/Reward Analysis</span>
+                              <TrendingUp className="w-3 h-3 text-sky-400/50" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <p className="text-[8px] text-white/30 uppercase">Long (Buy)</p>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 flex-1 bg-white/5 rounded-full overflow-hidden flex">
+                                    {tpSlMode === 'PERCENTAGE' ? (
+                                      <>
+                                        <div className="h-full bg-emerald-500/50" style={{ width: `${(Number(tpBuyPct) / (Number(tpBuyPct) + Number(slBuyPct))) * 100}%` }} />
+                                        <div className="h-full bg-rose-500/50" style={{ width: `${(Number(slBuyPct) / (Number(tpBuyPct) + Number(slBuyPct))) * 100}%` }} />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="h-full bg-emerald-500/50" style={{ width: '50%' }} />
+                                        <div className="h-full bg-rose-500/50" style={{ width: '50%' }} />
+                                      </>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-mono font-bold text-white/80 whitespace-nowrap">
+                                    {tpSlMode === 'PERCENTAGE' 
+                                      ? (Number(slBuyPct) > 0 ? (Number(tpBuyPct) / Number(slBuyPct)).toFixed(2) : '∞')
+                                      : (slBuyPrice && tpBuyPrice && Number(slBuyPrice) !== Number(currentPrice) 
+                                          ? (Math.abs(Number(tpBuyPrice) - Number(currentPrice)) / Math.abs(Number(currentPrice) - Number(slBuyPrice))).toFixed(2) 
+                                          : '0.00')} R
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[8px] text-white/30 uppercase">Short (Sell)</p>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 flex-1 bg-white/5 rounded-full overflow-hidden flex">
+                                    {tpSlMode === 'PERCENTAGE' ? (
+                                      <>
+                                        <div className="h-full bg-emerald-500/50" style={{ width: `${(Number(tpSellPct) / (Number(tpSellPct) + Number(slSellPct))) * 100}%` }} />
+                                        <div className="h-full bg-rose-500/50" style={{ width: `${(Number(slSellPct) / (Number(tpSellPct) + Number(slSellPct))) * 100}%` }} />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="h-full bg-emerald-500/50" style={{ width: '50%' }} />
+                                        <div className="h-full bg-rose-500/50" style={{ width: '50%' }} />
+                                      </>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-mono font-bold text-white/80 whitespace-nowrap">
+                                    {tpSlMode === 'PERCENTAGE' 
+                                      ? (Number(slSellPct) > 0 ? (Number(tpSellPct) / Number(slSellPct)).toFixed(2) : '∞')
+                                      : (slSellPrice && tpSellPrice && Number(slSellPrice) !== Number(currentPrice) 
+                                          ? (Math.abs(Number(currentPrice) - Number(tpSellPrice)) / Math.abs(Number(slSellPrice) - Number(currentPrice))).toFixed(2) 
+                                          : '0.00')} R
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={useMaxDuration} 
+                                onChange={e => setUseMaxDuration(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Max Position Duration</span>
+                              <Tooltip text="Automatically close positions after a specified time limit.">
+                                <Clock className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+                          {useMaxDuration && (
+                            <div className="pl-6">
+                              <label className="flex items-center gap-1.5 text-[8px] text-white/30 uppercase mb-1">
+                                Duration (minutes)
+                                <Tooltip text="The maximum time a position can remain open.">
+                                  <Info className="w-2.5 h-2.5" />
+                                </Tooltip>
+                              </label>
+                              <input 
+                                type="number" 
+                                value={maxDuration}
+                                onChange={(e) => setMaxDuration(e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50 transition-colors"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={useMarketSentiment} 
+                                onChange={e => setUseMarketSentiment(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Market Sentiment Filter</span>
+                              <Tooltip text="Only enter trades that align with the overall market trend (Bullish/Bearish).">
+                                <TrendingUp className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {openSection === 'RISK' && (
+                      <motion.div
+                        key="risk"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        className="space-y-3"
+                      >
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={useLiquidationProtection} 
+                                onChange={e => setUseLiquidationProtection(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Liquidation Protection</span>
+                              <Tooltip text="Automatically close positions if they get too close to the liquidation price.">
+                                <ShieldAlert className="w-3 h-3 text-white/20 hover:text-red-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+                          {useLiquidationProtection && (
+                            <div className="pl-6">
+                              <label className="flex items-center gap-1.5 text-[8px] text-white/30 uppercase mb-1">
+                                Distance Threshold (%)
+                                <Tooltip text="Trigger protection when mark price is within X% of liquidation price.">
+                                  <Info className="w-2.5 h-2.5" />
+                                </Tooltip>
+                              </label>
+                              <input 
+                                type="number" 
+                                value={liquidationThreshold}
+                                onChange={(e) => setLiquidationThreshold(e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50 transition-colors"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={useAlertSound} 
+                                onChange={e => setUseAlertSound(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Audible Alerts</span>
+                              <Tooltip text="Play a sound when a trade is closed by TP, SL, or Trailing Stop.">
+                                {useAlertSound ? <Bell className="w-3 h-3 text-sky-400" /> : <BellOff className="w-3 h-3 text-white/20" />}
+                              </Tooltip>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={useTrailingStop} 
+                                onChange={e => setUseTrailingStop(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Trailing Stop Loss</span>
+                              <Tooltip text="Automatically close positions when profit drops by a certain percentage of the position size from its peak profit.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+                          {useTrailingStop && (
+                            <div className="pl-6">
+                              <label className="flex items-center gap-1.5 text-[8px] text-white/30 uppercase mb-1">
+                                Trailing Stop Loss Percentage (%)
+                                <Tooltip text="The percentage drop from peak profit (relative to position size) that triggers a close. For example, if position is $1000 and this is 1%, it closes if profit drops $10 from its peak.">
+                                  <Info className="w-2.5 h-2.5" />
+                                </Tooltip>
+                              </label>
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                min="0"
+                                value={trailingStop}
+                                onChange={(e) => setTrailingStop(e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50 transition-colors"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={useProfitFloor} 
+                                onChange={e => setUseProfitFloor(e.target.checked)} 
+                                className="rounded border-white/10 bg-black/40 text-sky-500" 
+                              />
+                              <span className="text-[10px] font-bold text-white/60">Profit Floor</span>
+                              <Tooltip text="Closes the position if unrealized profit drops below this percentage of the initial trade value. Only activates once profit has exceeded this threshold.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+                          {useProfitFloor && (
+                            <div className="pl-6">
+                              <label className="flex items-center gap-1.5 text-[8px] text-white/30 uppercase mb-1">
+                                Floor Threshold (%)
+                                <Tooltip text="The percentage of initial trade value to lock in as profit.">
+                                  <Info className="w-2.5 h-2.5" />
+                                </Tooltip>
+                              </label>
+                              <input 
+                                type="number" 
+                                value={profitFloorPct}
+                                onChange={(e) => setProfitFloorPct(e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50 transition-colors"
+                              />
                             </div>
                           )}
                         </div>
@@ -3105,6 +3830,38 @@ export default function App() {
                               </Tooltip>
                             </label>
                           </div>
+
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={useVolumeSpike} onChange={e => setUseVolumeSpike(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
+                              <span className="text-[10px] font-bold text-white/60">Volume Spike Detection</span>
+                              <Tooltip text="Only enter trades if current volume is significantly higher than average.">
+                                <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                              </Tooltip>
+                            </label>
+                          </div>
+                          {useVolumeSpike && (
+                            <div className="pl-6">
+                              <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                Threshold (%)
+                                <Tooltip text="Percentage above average volume required for a signal.">
+                                  <Info className="w-2.5 h-2.5" />
+                                </Tooltip>
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input 
+                                  type="range" 
+                                  min="5" 
+                                  max="200" 
+                                  step="5"
+                                  value={volumeSpikeThreshold} 
+                                  onChange={e => setVolumeSpikeThreshold(e.target.value)} 
+                                  className="flex-1 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-sky-500" 
+                                />
+                                <span className="text-[10px] font-mono text-sky-400 w-8 text-right">{volumeSpikeThreshold}%</span>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="flex items-center justify-between">
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -3649,25 +4406,35 @@ export default function App() {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">API Key</label>
-              <input 
-                type="text" 
-                value={newAccKey}
-                onChange={(e) => setNewAccKey(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
-                placeholder="Enter Binance API Key"
-                required
-              />
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20">
+                  <Key className="w-4 h-4" />
+                </div>
+                <input 
+                  type="text" 
+                  value={newAccKey}
+                  onChange={(e) => setNewAccKey(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                  placeholder="Enter Binance API Key"
+                  required
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">API Secret</label>
-              <input 
-                type="password" 
-                value={newAccSecret}
-                onChange={(e) => setNewAccSecret(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
-                placeholder="Enter Binance API Secret"
-                required
-              />
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input 
+                  type="password" 
+                  value={newAccSecret}
+                  onChange={(e) => setNewAccSecret(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                  placeholder="Enter Binance API Secret"
+                  required
+                />
+              </div>
             </div>
             <div className="flex gap-3 pt-2">
               <button 
@@ -3738,10 +4505,14 @@ export default function App() {
 
       {/* Trade Confirmation Modal */}
       {tradeConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setTradeConfirm(null)}
+        >
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl"
           >
             <div className="flex items-center gap-3 mb-6">
@@ -3767,24 +4538,72 @@ export default function App() {
                   </p>
                 </div>
                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-white/40 uppercase mb-1">Entry Price</p>
+                  <p className="font-bold text-sm text-sky-400">${Number(currentPrice).toFixed(2)}</p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                   <p className="text-[10px] text-white/40 uppercase mb-1">Volume</p>
                   <p className="font-bold text-sm">${tradeConfirm.volume} USDT</p>
                 </div>
                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                   <p className="text-[10px] text-white/40 uppercase mb-1">Quantity</p>
-                  <p className="font-bold text-sm">{tradeConfirm.quantity}</p>
+                  <p className="font-bold text-sm">
+                    {tradeConfirm.quantity} <span className="text-[10px] text-white/20">{tradeConfirm.symbol.replace('USDT', '')}</span>
+                  </p>
                 </div>
                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                   <p className="text-[10px] text-white/40 uppercase mb-1">Take Profit</p>
                   <p className="font-bold text-sm text-emerald-400">
-                    {tradeConfirm.tp}{tradeConfirm.mode === 'PERCENTAGE' ? '%' : ''}
+                    {tradeConfirm.tp ? `${tradeConfirm.tp}${tradeConfirm.mode === 'PERCENTAGE' ? '%' : ''}` : 'None'}
                   </p>
                 </div>
                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                   <p className="text-[10px] text-white/40 uppercase mb-1">Stop Loss</p>
                   <p className="font-bold text-sm text-red-400">
-                    {tradeConfirm.sl}{tradeConfirm.mode === 'PERCENTAGE' ? '%' : ''}
+                    {tradeConfirm.sl ? `${tradeConfirm.sl}${tradeConfirm.mode === 'PERCENTAGE' ? '%' : ''}` : 'None'}
                   </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Leverage</label>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-[8px] text-white/20 uppercase font-bold">Est. Margin</p>
+                      <p className="text-xs font-bold text-emerald-500/80">
+                        ${(Number(tradeConfirm.volume) / Number(tradeConfirm.leverage || 1)).toFixed(2)} USDT
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded px-2 py-1">
+                      <input 
+                        type="number"
+                        min="1"
+                        max="125"
+                        value={tradeConfirm.leverage}
+                        onChange={(e) => setTradeConfirm({ ...tradeConfirm, leverage: e.target.value })}
+                        className="w-10 bg-transparent text-xs text-sky-400 font-bold focus:outline-none"
+                      />
+                      <span className="text-[10px] font-bold text-sky-400/60 uppercase">x</span>
+                    </div>
+                  </div>
+                </div>
+                <input 
+                  type="range"
+                  min="1"
+                  max="125"
+                  step="1"
+                  value={tradeConfirm.leverage}
+                  onChange={(e) => setTradeConfirm({ ...tradeConfirm, leverage: e.target.value })}
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                />
+                <div className="flex justify-between text-[8px] text-white/20 font-bold uppercase">
+                  <span>1x</span>
+                  <span>25x</span>
+                  <span>50x</span>
+                  <span>75x</span>
+                  <span>100x</span>
+                  <span>125x</span>
                 </div>
               </div>
               
@@ -3812,6 +4631,83 @@ export default function App() {
                 }`}
               >
                 {loading ? 'Executing...' : 'Confirm Order'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Close Position Confirmation Modal */}
+      {closeConfirm && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setCloseConfirm(null)}
+        >
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-red-500/20 text-red-500">
+                <Square className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Close Position</h2>
+                <p className="text-[10px] text-white/40 uppercase tracking-widest">Confirm Exit</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Symbol</p>
+                    <p className="font-bold text-lg">{closeConfirm.symbol}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Side</p>
+                    <p className={`font-bold ${closeConfirm.side === 'BUY' ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {closeConfirm.side === 'BUY' ? 'LONG' : 'SHORT'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                  <div>
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Size</p>
+                    <p className="font-bold text-sm">{closeConfirm.amount.toFixed(4)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Unrealized PnL</p>
+                    <p className={`font-bold text-sm ${closeConfirm.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {closeConfirm.pnl >= 0 ? '+' : ''}{closeConfirm.pnl.toFixed(2)} USDT ({closeConfirm.pnlPct.toFixed(2)}%)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-xl">
+                <p className="text-[10px] text-red-400/60 leading-relaxed">
+                  Closing this position will execute a market order to exit. The final realized PnL may vary slightly due to slippage.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setCloseConfirm(null)}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmClosePosition}
+                disabled={loading}
+                className="flex-1 bg-red-500 hover:bg-red-400 text-black font-bold py-3 rounded-xl transition-all shadow-lg shadow-red-500/20"
+              >
+                {loading ? 'Closing...' : 'Confirm Close'}
               </button>
             </div>
           </motion.div>

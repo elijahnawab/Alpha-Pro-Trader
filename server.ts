@@ -33,8 +33,14 @@ app.use((req, res, next) => {
 const PORT = 3000;
 
 // Binance bases
-const FUT_BASE = process.env.BINANCE_FUTURES_BASE || "https://fapi.binance.com";
-const SPOT_BASE = process.env.BINANCE_SPOT_BASE || "https://api.binance.com";
+const isValidBase = (url: any) => typeof url === 'string' && url.startsWith('http');
+
+const FUT_BASE = isValidBase(process.env.BINANCE_FUTURES_BASE) 
+  ? process.env.BINANCE_FUTURES_BASE! 
+  : "https://fapi.binance.com";
+const SPOT_BASE = isValidBase(process.env.BINANCE_SPOT_BASE) 
+  ? process.env.BINANCE_SPOT_BASE! 
+  : "https://api.binance.com";
 
 // Secrets
 const MASTER_KEY = process.env.MASTER_KEY || "";
@@ -250,10 +256,31 @@ async function bFetch(
     throw new Error("Global fetch is not defined. Ensure you are using Node.js 18+ or a polyfill.");
   }
 
+  // Defensive check for base URL
+  if (!base || typeof base !== 'string' || !base.startsWith('http')) {
+    console.error(`Invalid base URL passed to bFetch: ${base}. Falling back to defaults.`);
+    if (pathname && String(pathname).includes('/fapi/')) base = "https://fapi.binance.com";
+    else base = "https://api.binance.com";
+  }
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
-  const url = new URL(base + pathname);
+  // Normalize URL construction
+  const safeBase = String(base || "").trim();
+  const baseUrl = safeBase.endsWith("/") ? safeBase.slice(0, -1) : safeBase;
+  const safePathname = String(pathname || "").trim();
+  const path = safePathname.startsWith("/") ? safePathname : "/" + safePathname;
+  const urlString = baseUrl + path;
+
+  let url: URL;
+  try {
+    url = new URL(urlString);
+  } catch (e) {
+    clearTimeout(id);
+    throw new Error(`Invalid URL constructed: ${urlString}`);
+  }
+
   for (const [k, v] of Object.entries(query || {})) {
     if (v === undefined || v === null || v === "") continue;
     url.searchParams.set(k, String(v));
@@ -261,6 +288,16 @@ async function bFetch(
 
   const headers: any = {};
   if (signed) {
+    if (!apiKey || !apiSecret || apiKey === "null" || apiKey === "undefined") {
+      throw new Error("Invalid API Key or Secret. Please check your account settings.");
+    }
+    
+    // Validate API key format (alphanumeric, usually 64 chars)
+    if (apiKey && !/^[a-zA-Z0-9_\-]+$/.test(apiKey)) {
+      console.warn("API Key contains unusual characters:", apiKey.substring(0, 4) + "...");
+      // We'll still allow it to proceed, but warn. Binance will reject if truly invalid.
+    }
+
     url.searchParams.set("timestamp", String(Date.now()));
     url.searchParams.set("recvWindow", "60000");
     const qs = url.searchParams.toString();
@@ -305,10 +342,31 @@ async function pubFetch(base: string, pathname: string, query = {}, timeout = 10
     throw new Error("Global fetch is not defined. Ensure you are using Node.js 18+ or a polyfill.");
   }
 
+  // Defensive check for base URL
+  if (!base || typeof base !== 'string' || !base.startsWith('http')) {
+    console.error(`Invalid base URL passed to pubFetch: ${base}. Falling back to defaults.`);
+    if (pathname && String(pathname).includes('/fapi/')) base = "https://fapi.binance.com";
+    else base = "https://api.binance.com";
+  }
+
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
-  const url = new URL(base + pathname);
+  // Normalize URL construction
+  const safeBase = String(base || "").trim();
+  const baseUrl = safeBase.endsWith("/") ? safeBase.slice(0, -1) : safeBase;
+  const safePathname = String(pathname || "").trim();
+  const path = safePathname.startsWith("/") ? safePathname : "/" + safePathname;
+  const urlString = baseUrl + path;
+
+  let url: URL;
+  try {
+    url = new URL(urlString);
+  } catch (e) {
+    clearTimeout(id);
+    throw new Error(`Invalid URL constructed: ${urlString}`);
+  }
+
   for (const [k, v] of Object.entries(query || {})) {
     if (v === undefined || v === null || v === "") continue;
     url.searchParams.set(k, String(v));
@@ -345,12 +403,14 @@ function getFilters(exInfo: any, symbol: string) {
   if (!s) return null;
 
   const lot = (s.filters || []).find((f: any) => f.filterType === "LOT_SIZE");
+  const priceFilter = (s.filters || []).find((f: any) => f.filterType === "PRICE_FILTER");
   const minNotional =
     (s.filters || []).find((f: any) => f.filterType === "MIN_NOTIONAL") ||
     (s.filters || []).find((f: any) => f.filterType === "NOTIONAL");
 
   return {
     stepSize: lot ? Number(lot.stepSize) : null,
+    tickSize: priceFilter ? Number(priceFilter.tickSize) : null,
     minQty: lot ? Number(lot.minQty) : null,
     minNotional: minNotional
       ? Number(minNotional.notional ?? minNotional.minNotional ?? 0)
@@ -361,6 +421,11 @@ function floorToStep(qty: number, stepSize: number) {
   if (!stepSize || stepSize <= 0) return qty;
   const inv = 1 / stepSize;
   return Math.floor(qty * inv) / inv;
+}
+function roundToStep(val: number, stepSize: number) {
+  if (!stepSize || stepSize <= 0) return val;
+  const inv = 1 / stepSize;
+  return Math.round(val * inv) / inv;
 }
 function decimalsFromStep(stepSize: number) {
   const s = String(stepSize);
@@ -513,6 +578,36 @@ async function startServer() {
       res.json({ ok: true, symbols });
     } catch (e: any) {
       res.status(500).json({ error: "spot_symbols_failed", details: e?.binance || e?.message || String(e) });
+    }
+  });
+
+  app.get("/api/futures/ticker24h", async (req, res) => {
+    try {
+      const data = await pubFetch(FUT_BASE, "/fapi/v1/ticker/24hr", {});
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: "ticker_failed", message: e.message });
+    }
+  });
+
+  app.get("/api/futures/leverage-brackets", authMiddleware, async (req: any, res) => {
+    const { symbol } = req.query;
+    const accounts = DB.accounts.filter((a: any) => a.uid === req.user.uid && a.enabled);
+    if (accounts.length === 0) return res.status(400).json({ error: "no_enabled_accounts" });
+    
+    const a = accounts[0]; // Just use first enabled account to check brackets
+    const apiKey = dec(a.apiKeyEnc);
+    const apiSecret = dec(a.apiSecretEnc);
+    if (!apiKey || !apiSecret) return res.status(400).json({ error: "invalid_credentials" });
+
+    try {
+      const data = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/leverageBracket", { 
+        signed: true, 
+        query: { symbol } 
+      });
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: "leverage_brackets_failed", details: e?.binance || e?.message || String(e) });
     }
   });
 
@@ -701,7 +796,7 @@ async function startServer() {
   });
 
   app.post("/api/futures/trade", authMiddleware, async (req: any, res) => {
-    const { symbol, side, notional, quantity, tpPct, slPct, tpPrice: reqTpPrice, slPrice: reqSlPrice } = req.body || {};
+    const { symbol, side, notional, quantity, tpPct, slPct, tpPrice: reqTpPrice, slPrice: reqSlPrice, tpSlMode, leverage: reqLeverage } = req.body || {};
     if (!symbol || !side || (!notional && !quantity)) {
       return res.status(400).json({ error: "symbol_side_notional_or_quantity_required" });
     }
@@ -739,7 +834,7 @@ async function startServer() {
           await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/leverage", {
             method: "POST",
             signed: true,
-            query: { symbol, leverage: DEFAULT_LEVERAGE },
+            query: { symbol, leverage: reqLeverage || DEFAULT_LEVERAGE },
           }).catch(() => {});
 
           await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/marginType", {
@@ -772,27 +867,40 @@ async function startServer() {
             let tpPrice: number | null = null;
             let slPrice: number | null = null;
 
-            if (reqTpPrice) {
-              tpPrice = Number(reqTpPrice);
-              if (isBuy && tpPrice <= price) throw new Error("Take Profit must be above current price for BUY");
-              if (!isBuy && tpPrice >= price) throw new Error("Take Profit must be below current price for SELL");
-            } else if (tpPct) {
-              tpPrice = isBuy ? price * (1 + Number(tpPct) / 100) : price * (1 - Number(tpPct) / 100);
+            if (tpSlMode === 'FIXED') {
+              if (reqTpPrice) {
+                tpPrice = Number(reqTpPrice);
+                if (isBuy && tpPrice <= price) throw new Error("Take Profit must be above current price for BUY");
+                if (!isBuy && tpPrice >= price) throw new Error("Take Profit must be below current price for SELL");
+              }
+              if (reqSlPrice) {
+                slPrice = Number(reqSlPrice);
+                if (isBuy && slPrice >= price) throw new Error("Stop Loss must be below current price for BUY");
+                if (!isBuy && slPrice <= price) throw new Error("Stop Loss must be above current price for SELL");
+                
+                const actualSlPct = isBuy ? ((price - slPrice) / price) * 100 : ((slPrice - price) / price) * 100;
+                if (actualSlPct > 20) throw new Error("Stop Loss exceeds 20% risk threshold");
+              }
+            } else {
+              // Default or PERCENTAGE mode
+              if (reqTpPrice) {
+                tpPrice = Number(reqTpPrice);
+              } else if (tpPct) {
+                tpPrice = isBuy ? price * (1 + Number(tpPct) / 100) : price * (1 - Number(tpPct) / 100);
+              }
+
+              if (reqSlPrice) {
+                slPrice = Number(reqSlPrice);
+              } else if (slPct) {
+                if (Number(slPct) > 20) throw new Error("Stop Loss exceeds 20% risk threshold");
+                slPrice = isBuy ? price * (1 - Number(slPct) / 100) : price * (1 + Number(slPct) / 100);
+              }
             }
 
-            if (reqSlPrice) {
-              slPrice = Number(reqSlPrice);
-              if (isBuy && slPrice >= price) throw new Error("Stop Loss must be below current price for BUY");
-              if (!isBuy && slPrice <= price) throw new Error("Stop Loss must be above current price for SELL");
-              
-              const actualSlPct = isBuy ? ((price - slPrice) / price) * 100 : ((slPrice - price) / price) * 100;
-              if (actualSlPct > 20) throw new Error("Stop Loss exceeds 20% risk threshold");
-            } else if (slPct) {
-              if (Number(slPct) > 20) throw new Error("Stop Loss exceeds 20% risk threshold");
-              slPrice = isBuy ? price * (1 - Number(slPct) / 100) : price * (1 + Number(slPct) / 100);
-            }
+            const priceDecimals = decimalsFromStep(filters.tickSize || 0.01);
 
             if (tpPrice) {
+              const finalTp = roundToStep(tpPrice, filters.tickSize || 0.01);
               await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
                 method: "POST",
                 signed: true,
@@ -800,7 +908,7 @@ async function startServer() {
                   symbol,
                   side: sideInv,
                   type: "TAKE_PROFIT_MARKET",
-                  stopPrice: tpPrice.toFixed(2),
+                  stopPrice: finalTp.toFixed(priceDecimals),
                   closePosition: "true",
                 },
               }).catch((err) => {
@@ -808,6 +916,7 @@ async function startServer() {
               });
             }
             if (slPrice) {
+              const finalSl = roundToStep(slPrice, filters.tickSize || 0.01);
               await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
                 method: "POST",
                 signed: true,
@@ -815,7 +924,7 @@ async function startServer() {
                   symbol,
                   side: sideInv,
                   type: "STOP_MARKET",
-                  stopPrice: slPrice.toFixed(2),
+                  stopPrice: finalSl.toFixed(priceDecimals),
                   closePosition: "true",
                 },
               }).catch((err) => {
