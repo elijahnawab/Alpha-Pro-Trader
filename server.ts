@@ -981,7 +981,14 @@ async function startServer() {
         canTrade: futuresAcc?.canTrade || false,
         canDeposit: futuresAcc?.canDeposit || false,
         canWithdraw: futuresAcc?.canWithdraw || false,
-        restrictions: restrictions || { msg: "Specific restriction details only available for some Spot keys" }
+        restrictions: restrictions || {
+          ipRestrict: false,
+          enableWithdrawals: false,
+          enableReading: true,
+          enableFutures: !!futuresAcc,
+          enableSpotAndMarginTrading: false,
+          msg: "Basic detection active. Full details require Spot permissions."
+        }
       });
     } catch (e: any) {
       const bError = e?.binance || {};

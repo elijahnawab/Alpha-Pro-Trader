@@ -1995,7 +1995,7 @@ export default function App() {
         if (a.id === accountId) {
           return {
             ...a,
-            restrictions: res.ok ? res : a.restrictions,
+            restrictions: res.ok ? res.restrictions : a.restrictions,
             permissionError: !res.ok && res.isPermissionError
           };
         }
@@ -2465,21 +2465,36 @@ export default function App() {
                   {acc.restrictions && (
                     <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-bold text-white/40 uppercase tracking-wider">API Key Permissions</span>
-                        <div className="flex items-center gap-1">
-                          <div className={`w-1.5 h-1.5 rounded-full ${acc.restrictions.ipRestrict ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                          <span className="text-[8px] text-white/40 uppercase font-mono">{acc.restrictions.ipRestrict ? 'IP Restricted' : 'Unrestricted IP'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Key className="w-3 h-3 text-white/40" />
+                          <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">API Permissions</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/[0.03] border border-white/5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${acc.restrictions.ipRestrict ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                          <span className={`text-[8px] font-mono uppercase ${acc.restrictions.ipRestrict ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {acc.restrictions.ipRestrict ? 'IP Restricted' : 'Unrestricted IP'}
+                          </span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className={`flex items-center justify-between p-1.5 rounded-lg border ${acc.restrictions.enableFutures ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400' : 'bg-red-500/5 border-red-500/10 text-red-400 opacity-60'}`}>
-                          <span className="text-[9px] font-bold">Futures</span>
-                          <span className="text-[8px] font-mono">{acc.restrictions.enableFutures ? 'ON' : 'OFF'}</span>
-                        </div>
-                        <div className={`flex items-center justify-between p-1.5 rounded-lg border ${acc.restrictions.enableSpotAndMarginTrading ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400' : 'bg-red-500/5 border-red-500/10 text-red-400 opacity-60'}`}>
-                          <span className="text-[9px] font-bold">Spot</span>
-                          <span className="text-[8px] font-mono">{acc.restrictions.enableSpotAndMarginTrading ? 'ON' : 'OFF'}</span>
-                        </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Tooltip text={acc.restrictions.enableFutures ? 'Futures trading is ENABLED' : 'Futures trading is DISABLED'}>
+                          <div className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${acc.restrictions.enableFutures ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400' : 'bg-red-500/5 border-red-500/10 text-red-500/40'}`}>
+                            <TrendingUp className={`w-3 h-3 mb-1 ${acc.restrictions.enableFutures ? 'opacity-100' : 'opacity-20'}`} />
+                            <span className="text-[7px] font-bold uppercase tracking-tighter">Futures</span>
+                          </div>
+                        </Tooltip>
+                        <Tooltip text={acc.restrictions.enableSpotAndMarginTrading ? 'Spot trading is ENABLED' : 'Spot trading is DISABLED'}>
+                          <div className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${acc.restrictions.enableSpotAndMarginTrading ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400' : 'bg-red-500/5 border-red-500/10 text-red-500/40'}`}>
+                            <Zap className={`w-3 h-3 mb-1 ${acc.restrictions.enableSpotAndMarginTrading ? 'opacity-100' : 'opacity-20'}`} />
+                            <span className="text-[7px] font-bold uppercase tracking-tighter">Spot</span>
+                          </div>
+                        </Tooltip>
+                        <Tooltip text={acc.restrictions.enableWithdrawals ? 'CRITICAL: Withdrawals are ENABLED. This is not recommended for trading bots.' : 'Withdrawals are DISABLED (Recommended)'}>
+                          <div className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${acc.restrictions.enableWithdrawals ? 'bg-red-500/10 border-red-500/20 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.1)]' : 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400/40'}`}>
+                            <Lock className={`w-3 h-3 mb-1 ${acc.restrictions.enableWithdrawals ? 'text-red-500' : 'text-emerald-500/40'}`} />
+                            <span className="text-[7px] font-bold uppercase tracking-tighter">Withdraw</span>
+                          </div>
+                        </Tooltip>
                       </div>
                       {!acc.restrictions.enableFutures && (
                         <div className="flex items-start gap-1.5 p-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
