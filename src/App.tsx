@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, 
@@ -8,19 +7,7 @@ import {
   Plus, 
   Trash2, 
   RefreshCw, 
-  Play, 
-=======
-import React, { useState, useEffect } from 'react';
-import {
-  LayoutDashboard,
-  Settings,
-  TrendingUp,
-  LogOut,
-  Plus,
-  Trash2,
-  RefreshCw,
   Play,
->>>>>>> f6b4c9e (Auto-sync)
   Square,
   Activity,
   Bot,
@@ -510,15 +497,11 @@ export default function App() {
   const [liveOrders, setLiveOrders] = useState(false);
   const [tradeLimits, setTradeLimits] = useState({ min: 5, max: 10 });
   const [botLogs, setBotLogs] = useState<{ time: number; msg: string; type: 'info' | 'success' | 'error' }[]>([]);
-<<<<<<< HEAD
-  const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION' | 'SCALPING'>('EMA_CROSS');
+  const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION' | 'SCALPING' | 'GRID_BOT' | 'DCA_BOT'>('EMA_CROSS');
   const [useLiquidationProtection, setUseLiquidationProtection] = useState(true);
   const [liquidationThreshold, setLiquidationThreshold] = useState('5');
   const [useMarketSentiment, setUseMarketSentiment] = useState(true);
   const [scalpingMode, setScalpingMode] = useState(false);
-=======
-  const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION' | 'GRID_BOT' | 'DCA_BOT'>('EMA_CROSS');
->>>>>>> f6b4c9e (Auto-sync)
   const [botStats, setBotStats] = useState({ trades: 0, wins: 0, losses: 0, totalPnl: 0 });
 
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
