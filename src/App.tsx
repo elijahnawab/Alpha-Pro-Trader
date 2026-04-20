@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, 
@@ -8,6 +9,18 @@ import {
   Trash2, 
   RefreshCw, 
   Play, 
+=======
+import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  Settings,
+  TrendingUp,
+  LogOut,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Play,
+>>>>>>> f6b4c9e (Auto-sync)
   Square,
   Activity,
   Bot,
@@ -247,22 +260,22 @@ const PRESETS_DATA = [
   }
 ];
 
-const SymbolSelector = ({ 
-  selectedSymbol, 
-  setSelectedSymbol, 
-  symbols, 
-  symbolSearch, 
-  setSymbolSearch, 
-  isSymbolListOpen, 
-  setIsSymbolListOpen 
-}: { 
-  selectedSymbol: string; 
-  setSelectedSymbol: (s: string) => void; 
-  symbols: any[]; 
-  symbolSearch: string; 
-  setSymbolSearch: (s: string) => void; 
-  isSymbolListOpen: boolean; 
-  setIsSymbolListOpen: (b: boolean) => void; 
+const SymbolSelector = ({
+  selectedSymbol,
+  setSelectedSymbol,
+  symbols,
+  symbolSearch,
+  setSymbolSearch,
+  isSymbolListOpen,
+  setIsSymbolListOpen
+}: {
+  selectedSymbol: string;
+  setSelectedSymbol: (s: string) => void;
+  symbols: any[];
+  symbolSearch: string;
+  setSymbolSearch: (s: string) => void;
+  isSymbolListOpen: boolean;
+  setIsSymbolListOpen: (b: boolean) => void;
 }) => {
   const filteredSymbols = symbols.filter(s => {
     const search = symbolSearch.toLowerCase();
@@ -276,8 +289,8 @@ const SymbolSelector = ({
   return (
     <div className="relative">
       <div className="relative">
-        <input 
-          type="text" 
+        <input
+          type="text"
           placeholder="Search symbol..."
           value={isSymbolListOpen ? symbolSearch : selectedSymbol}
           onFocus={() => setIsSymbolListOpen(true)}
@@ -295,7 +308,7 @@ const SymbolSelector = ({
 
       <AnimatePresence>
         {isSymbolListOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -329,10 +342,10 @@ const SymbolSelector = ({
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {isSymbolListOpen && (
-        <div 
-          className="fixed inset-0 z-40" 
+        <div
+          className="fixed inset-0 z-40"
           onClick={() => {
             setIsSymbolListOpen(false);
             setSymbolSearch('');
@@ -497,11 +510,15 @@ export default function App() {
   const [liveOrders, setLiveOrders] = useState(false);
   const [tradeLimits, setTradeLimits] = useState({ min: 5, max: 10 });
   const [botLogs, setBotLogs] = useState<{ time: number; msg: string; type: 'info' | 'success' | 'error' }[]>([]);
+<<<<<<< HEAD
   const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION' | 'SCALPING'>('EMA_CROSS');
   const [useLiquidationProtection, setUseLiquidationProtection] = useState(true);
   const [liquidationThreshold, setLiquidationThreshold] = useState('5');
   const [useMarketSentiment, setUseMarketSentiment] = useState(true);
   const [scalpingMode, setScalpingMode] = useState(false);
+=======
+  const [strategy, setStrategy] = useState<'EMA_CROSS' | 'RSI_REVERSION' | 'GRID_BOT' | 'DCA_BOT'>('EMA_CROSS');
+>>>>>>> f6b4c9e (Auto-sync)
   const [botStats, setBotStats] = useState({ trades: 0, wins: 0, losses: 0, totalPnl: 0 });
 
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
@@ -712,6 +729,15 @@ export default function App() {
   // Bot tracking
   const peakProfitRef = React.useRef<Record<string, number>>({});
   const posStartTimeRef = React.useRef<Record<string, number>>({});
+  const lastDcaTimeRef = React.useRef<Record<string, number>>({});
+  const lastGridPriceRef = React.useRef<Record<string, number>>({});
+
+  // New bot parameters
+  const [dcaInterval, setDcaInterval] = useState('60');
+  const [gridStepPct, setGridStepPct] = useState('1.0');
+
+  // AI Autopilot
+  const [autopilot, setAutopilot] = useState(false);
 
   // Account form
   const [newAccLabel, setNewAccLabel] = useState('');
@@ -719,15 +745,10 @@ export default function App() {
   const [newAccKey, setNewAccKey] = useState('');
   const [newAccSecret, setNewAccSecret] = useState('');
 
-  // Edit Account state
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [editAccLabel, setEditAccLabel] = useState('');
-  const [editAccGroup, setEditAccGroup] = useState('');
-
   useEffect(() => {
     if (token) {
       refreshAll();
-      const interval = setInterval(() => refreshAll(true), 2000);
+      const interval = setInterval(() => refreshAll(true), 5000);
       return () => clearInterval(interval);
     }
   }, [token]);
@@ -779,15 +800,20 @@ export default function App() {
   const loadChartData = async (forceClear = false) => {
     if (!selectedSymbol) return;
     try {
-      if (forceClear) setChartData([]); 
+      if (forceClear) setChartData([]);
       const endpoint = market === 'FUTURES' ? '/api/futures/klines' : '/api/spot/klines';
+<<<<<<< HEAD
       const data = await api(`${endpoint}?symbol=${encodeURIComponent(selectedSymbol)}&interval=${chartInterval}&limit=100`, { auth: false });
       
+=======
+      const data = await api(`${endpoint}?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=100`, { auth: false });
+
+>>>>>>> f6b4c9e (Auto-sync)
       if (!Array.isArray(data)) {
         console.error('Klines data is not an array:', data);
         throw new Error(`Invalid klines data format: expected array, got ${typeof data}`);
       }
-      
+
       if (data.length > 0 && !Array.isArray(data[0])) {
         console.error('Klines data elements are not arrays:', data[0]);
         throw new Error('Invalid klines data format: elements are not arrays');
@@ -802,7 +828,7 @@ export default function App() {
         volume: Number(k[5])
       }));
       setChartData(formatted);
-      
+
       // Update current indicators for UI
       if (showMacd || useMacdHistogramFilter) {
         const closes = data.map((k: any) => Number(k[4]));
@@ -821,6 +847,7 @@ export default function App() {
       autoTick();
     }
     return () => clearInterval(timer);
+<<<<<<< HEAD
   }, [token, autoMode, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpBuyPct, tpSellPct, slBuyPct, slSellPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacdHistogramFilter, macdFast, macdSlow, macdSignal, tpSlMode, tpBuyPrice, tpSellPrice, slBuyPrice, slSellPrice, useProfitFloor, useTrailingStop, maxDuration]);
 
   useEffect(() => {
@@ -848,6 +875,9 @@ export default function App() {
     if (score <= 1) return 'BEARISH';
     return 'NEUTRAL';
   };
+=======
+  }, [autoMode, token, selectedSymbol, emaShort, emaLong, tradeVol, crossCond, tpPct, slPct, useRsi, rsiPeriod, rsiOverbought, rsiOversold, useRsiDivergence, useMacd, macdFast, macdSlow, macdSignal]);
+>>>>>>> f6b4c9e (Auto-sync)
 
   const calculateEMA = (data: number[], period: number) => {
     const k = 2 / (period + 1);
@@ -955,8 +985,8 @@ export default function App() {
       const prevRsiLow = rsiLows[rsiLows.length - 2];
 
       // Ensure they are somewhat synchronized in time (within 5 candles)
-      if (Math.abs(lastPriceLow.index - lastRsiLow.index) < 5 && 
-          Math.abs(prevPriceLow.index - prevRsiLow.index) < 5) {
+      if (Math.abs(lastPriceLow.index - lastRsiLow.index) < 5 &&
+        Math.abs(prevPriceLow.index - prevRsiLow.index) < 5) {
         if (lastPriceLow.value < prevPriceLow.value && lastRsiLow.value > prevRsiLow.value) {
           bullish = true;
         }
@@ -970,8 +1000,8 @@ export default function App() {
       const lastRsiHigh = rsiHighs[rsiHighs.length - 1];
       const prevRsiHigh = rsiHighs[rsiHighs.length - 2];
 
-      if (Math.abs(lastPriceHigh.index - lastRsiHigh.index) < 5 && 
-          Math.abs(prevPriceHigh.index - prevRsiHigh.index) < 5) {
+      if (Math.abs(lastPriceHigh.index - lastRsiHigh.index) < 5 &&
+        Math.abs(prevPriceHigh.index - prevRsiHigh.index) < 5) {
         if (lastPriceHigh.value > prevPriceHigh.value && lastRsiHigh.value < prevRsiHigh.value) {
           bearish = true;
         }
@@ -988,12 +1018,12 @@ export default function App() {
     const minData = slow + signal;
 
     if (data.length < minData) return { macdLine: 0, signalLine: 0, histogram: 0 };
-    
+
     // MACD Line: Fast EMA - Slow EMA
     const emaFast = calculateEMA(data, fast);
     const emaSlow = calculateEMA(data, slow);
     const macdLine = emaFast - emaSlow;
-    
+
     // Signal Line: Signal EMA of MACD Line
     const macdSeries: number[] = [];
     for (let i = signal * 2; i >= 0; i--) {
@@ -1014,40 +1044,64 @@ export default function App() {
 
   const autoTick = async () => {
     try {
+<<<<<<< HEAD
       const enabledAccounts = accountsRef.current.filter(a => a.enabled);
       if (enabledAccounts.length === 0) {
         // If no accounts enabled, we don't need to run the bot logic
         return;
       }
+=======
+      const effTpPct = autopilot ? 1.5 : Number(tpPct);
+      const effSlPct = autopilot ? 0.75 : Number(slPct);
+      const effMaxDuration = autopilot ? 30 : Number(maxDuration);
+      const effTrailingStop = autopilot ? 10 : Number(trailingStop);
+      const effStrategy = autopilot ? 'EMA_CROSS' : strategy;
+      const effTradeVol = autopilot ? Math.max(10, tradeLimits.min) : Number(tradeVol);
+      const effUseRsi = autopilot ? true : useRsi;
+      const effUseMacd = autopilot ? false : useMacd;
+      const effUseRsiDivergence = autopilot ? false : useRsiDivergence;
+>>>>>>> f6b4c9e (Auto-sync)
 
       // 1. Manage existing positions (Trailing Stop & Max Duration)
       const currentPosKeys = new Set<string>();
       const symbolsWithPositions = new Set<string>();
+<<<<<<< HEAD
       
       for (const acc of accountsRef.current) {
         if (!acc.enabled || acc.permissionError || !acc.futures?.positions) continue;
         
+=======
+
+      for (const acc of accounts) {
+        if (!acc.enabled || !acc.futures?.positions) continue;
+
+>>>>>>> f6b4c9e (Auto-sync)
         for (const p of acc.futures.positions) {
           const key = `${acc.id}_${p.symbol}`;
           currentPosKeys.add(key);
           symbolsWithPositions.add(p.symbol);
-          
+
           // Track peak profit (USDT)
           const currentProfit = p.unrealizedProfit;
           const peak = peakProfitRef.current[key] || 0;
-          
+
           // Only track peak if profit is positive and greater than previous peak
           if (currentProfit > peak && currentProfit > 0) {
             peakProfitRef.current[key] = currentProfit;
           }
 
+<<<<<<< HEAD
           // Trailing Stop Logic: Trigger if profit drops by X% from its peak
           const tStop = (useTrailingStop || autoPilot) ? (autoPilot ? 2 : Number(trailingStop)) : 0;
+=======
+          // Trailing Stop Logic
+          const tStop = Number(trailingStop);
+>>>>>>> f6b4c9e (Auto-sync)
           if (peak > 0 && tStop > 0) {
             const initialValue = Math.abs(p.amount) * p.entryPrice;
             const dropAmount = initialValue * (tStop / 100);
             const threshold = peak - dropAmount;
-            
+
             if (currentProfit < threshold) {
               const msg = `Trailing stop triggered for ${p.symbol} on ${acc.label} (Peak: $${peak.toFixed(2)}, Current: $${currentProfit.toFixed(2)}, Drop: ${tStop}% of pos)`;
               setStatus({ msg: `Auto: ${msg}`, ok: true });
@@ -1065,7 +1119,7 @@ export default function App() {
           const pFloor = (useProfitFloor || autoPilot) ? (autoPilot ? 0.3 : Number(profitFloorPct)) : 0;
           const initialValue = Math.abs(p.amount) * p.entryPrice;
           const floorThresholdUSDT = initialValue * (pFloor / 100);
-          
+
           if (pFloor > 0 && peak > floorThresholdUSDT && currentProfit < floorThresholdUSDT) {
             const msg = `Profit floor triggered for ${p.symbol} on ${acc.label} (Floor: ${pFloor}%, Current: ${p.pnlPct.toFixed(2)}%)`;
             setStatus({ msg: `Auto: ${msg}`, ok: true });
@@ -1103,9 +1157,15 @@ export default function App() {
           }
 
           // Manual TP/SL Fallback Monitoring
+<<<<<<< HEAD
           let tpTriggered = false;
           let slTriggered = false;
           let triggerMsg = '';
+=======
+          const tp = Number(tpPct);
+          const sl = Number(slPct);
+          const pnl = p.pnlPct; // Percentage PnL
+>>>>>>> f6b4c9e (Auto-sync)
 
           if (tpSlMode === 'PERCENTAGE') {
             const tp = p.amount > 0 ? Number(tpBuyPct) : Number(tpSellPct);
@@ -1182,8 +1242,13 @@ export default function App() {
           }
 
           const startTime = posStartTimeRef.current[key];
+<<<<<<< HEAD
           const maxMin = Number(maxDuration);
           if (useMaxDuration && startTime && maxMin > 0) {
+=======
+          const maxMin = effMaxDuration;
+          if (startTime && maxMin > 0) {
+>>>>>>> f6b4c9e (Auto-sync)
             const elapsedMin = (Date.now() - startTime) / 60000;
             if (elapsedMin > maxMin) {
               const msg = `Max duration reached for ${p.symbol} on ${acc.label}`;
@@ -1206,6 +1271,7 @@ export default function App() {
         if (!currentPosKeys.has(key)) delete posStartTimeRef.current[key];
       });
 
+<<<<<<< HEAD
       // 2. Detect new signals (Only if Auto Scalper is ON)
       if (!autoMode) {
         return;
@@ -1213,33 +1279,54 @@ export default function App() {
 
       // Skip if we already have a position for this symbol
       if (symbolsWithPositions.has(selectedSymbol)) {
+=======
+      // 2. Detect new signals
+      // Skip if we already have a position for this symbol (unless DCA_BOT is averaging)
+      if (symbolsWithPositions.has(selectedSymbol) && effStrategy !== 'DCA_BOT') {
+        return;
+      }
+
+      // Stop entering new trades if internal wallet has zero or negative balance
+      if (wallet.balance <= 0) {
+        setStatus({ msg: 'Auto: Bot paused. Internal Wallet balance is low.', ok: false });
+>>>>>>> f6b4c9e (Auto-sync)
         return;
       }
 
       const klines = await api(`/api/futures/klines?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=250`, { auth: false });
       const closes = klines.map((k: any) => Number(k[4]));
+<<<<<<< HEAD
       const volumes = klines.map((k: any) => Number(k[5]));
       
       // Update current indicators for UI
       if (showMacd || useMacdHistogramFilter) {
+=======
+
+      // Update current indicators for UI
+      if (effUseMacd) {
+>>>>>>> f6b4c9e (Auto-sync)
         setCurrentMacd(calculateMACD(closes));
       }
-      
+
       let signal = false;
       let side: 'BUY' | 'SELL' = 'BUY';
 
+<<<<<<< HEAD
       // Common Indicators
       const avgVol = volumes.slice(-20).reduce((a: number, b: number) => a + b, 0) / 20;
       const currentVol = volumes[volumes.length - 1];
       const volSpike = useVolumeSpike ? (currentVol > avgVol * (1 + Number(volumeSpikeThreshold) / 100)) : true;
 
       if (strategy === 'EMA_CROSS') {
+=======
+      if (effStrategy === 'EMA_CROSS') {
+>>>>>>> f6b4c9e (Auto-sync)
         const shortP = Number(emaShort);
         const longP = Number(emaLong);
-        
+
         const eShort = calculateEMA(closes, shortP);
         const eLong = calculateEMA(closes, longP);
-        
+
         const prevCloses = closes.slice(0, -1);
         const prevShort = calculateEMA(prevCloses, shortP);
         const prevLong = calculateEMA(prevCloses, longP);
@@ -1251,7 +1338,7 @@ export default function App() {
           if (prevShort >= prevLong && eShort < eLong && volSpike) signal = true;
           side = 'SELL';
         }
-      } else if (strategy === 'RSI_REVERSION') {
+      } else if (effStrategy === 'RSI_REVERSION') {
         const rsiVal = calculateRSI(closes, Number(rsiPeriod));
         if (rsiVal < Number(rsiOversold) && volSpike) {
           signal = true;
@@ -1260,6 +1347,7 @@ export default function App() {
           signal = true;
           side = 'SELL';
         }
+<<<<<<< HEAD
       } else if (strategy === 'SCALPING') {
         // Scalping: EMA 5/13 cross + RSI confirmation on 1m + EMA 200 Trend Filter + Volume Spike
         const e5 = calculateEMA(closes, 5);
@@ -1285,17 +1373,48 @@ export default function App() {
         const sentiment = calculateMarketSentiment(closes);
         if (side === 'BUY' && sentiment === 'BEARISH') signal = false;
         if (side === 'SELL' && sentiment === 'BULLISH') signal = false;
+=======
+      } else if (effStrategy === 'GRID_BOT') {
+        const lastPrice = lastGridPriceRef.current[selectedSymbol];
+        const currentPriceVal = closes[closes.length - 1];
+        if (!lastPrice) {
+          lastGridPriceRef.current[selectedSymbol] = currentPriceVal;
+          // Trigger first entry
+          signal = true;
+          side = crossCond === 'UP' ? 'BUY' : 'SELL';
+        } else {
+          const pctChange = ((currentPriceVal - lastPrice) / lastPrice) * 100;
+          if (pctChange <= -Number(gridStepPct)) {
+            signal = true;
+            side = 'BUY';
+            lastGridPriceRef.current[selectedSymbol] = currentPriceVal;
+          } else if (pctChange >= Number(gridStepPct)) {
+            signal = true;
+            side = 'SELL';
+            lastGridPriceRef.current[selectedSymbol] = currentPriceVal;
+          }
+        }
+      } else if (effStrategy === 'DCA_BOT') {
+        const lastTime = lastDcaTimeRef.current[selectedSymbol] || 0;
+        const now = Date.now();
+        const intervalMs = Number(dcaInterval) * 60 * 1000;
+        if (now - lastTime >= intervalMs) {
+          signal = true;
+          side = crossCond === 'UP' ? 'BUY' : 'SELL';
+          lastDcaTimeRef.current[selectedSymbol] = now;
+        }
+>>>>>>> f6b4c9e (Auto-sync)
       }
 
       // RSI Confirmation (only for EMA_CROSS)
-      if (signal && strategy === 'EMA_CROSS' && useRsi) {
+      if (signal && effStrategy === 'EMA_CROSS' && effUseRsi) {
         const rsiVal = calculateRSI(closes, Number(rsiPeriod));
         if (side === 'BUY' && rsiVal > Number(rsiOverbought)) signal = false; // Overbought, don't buy
         if (side === 'SELL' && rsiVal < Number(rsiOversold)) signal = false; // Oversold, don't sell
       }
 
       // RSI Divergence Confirmation
-      if (signal && useRsiDivergence) {
+      if (signal && effUseRsiDivergence) {
         // We need a series of RSI values to detect divergence
         const rsiPeriodVal = Number(rsiPeriod);
         const rsiSeries: number[] = [];
@@ -1304,14 +1423,18 @@ export default function App() {
           const subData = closes.slice(0, closes.length - i);
           rsiSeries.push(calculateRSI(subData, rsiPeriodVal));
         }
-        
+
         const { bullish, bearish } = detectRSIDivergence(closes.slice(-41), rsiSeries);
         if (side === 'BUY' && !bullish) signal = false;
         if (side === 'SELL' && !bearish) signal = false;
       }
 
       // MACD Confirmation (Histogram check)
+<<<<<<< HEAD
       if (signal && useMacdHistogramFilter) {
+=======
+      if (signal && effUseMacd) {
+>>>>>>> f6b4c9e (Auto-sync)
         const { histogram } = calculateMACD(closes);
         if (side === 'BUY' && histogram <= 0) signal = false; // Histogram must be positive for BUY
         if (side === 'SELL' && histogram >= 0) signal = false; // Histogram must be negative for SELL
@@ -1382,7 +1505,17 @@ export default function App() {
 
         const tradeRes = await api('/api/futures/trade', {
           method: 'POST',
+<<<<<<< HEAD
           body
+=======
+          body: {
+            symbol: selectedSymbol,
+            side,
+            notional: Number(tradeVol),
+            tpPct: Number(tpPct),
+            slPct: Number(slPct)
+          }
+>>>>>>> f6b4c9e (Auto-sync)
         });
 
         if (tradeRes.results) {
@@ -1502,12 +1635,17 @@ export default function App() {
     setBacktestResults(null);
     try {
       const limit = Number(backtestDays) * 24 * 60; // 1m candles
+<<<<<<< HEAD
       const klines = await api(`/api/futures/klines?symbol=${encodeURIComponent(selectedSymbol)}&interval=1m&limit=${Math.min(limit, 1500)}`, { auth: false });
       
+=======
+      const klines = await api(`/api/futures/klines?symbol=${selectedSymbol}&interval=1m&limit=${Math.min(limit, 1500)}`, { auth: false });
+
+>>>>>>> f6b4c9e (Auto-sync)
       const closes = klines.map((k: any) => Number(k[4]));
       const volumes = klines.map((k: any) => Number(k[5]));
       const times = klines.map((k: any) => Number(k[0]));
-      
+
       const trades: any[] = [];
       let currentPos: { side: 'BUY' | 'SELL'; entryPrice: number; entryTime: number; peakProfit: number } | null = null;
       let totalPnl = 0;
@@ -1529,10 +1667,10 @@ export default function App() {
 
         if (currentPos) {
           // Manage position
-          const pnlPct = currentPos.side === 'BUY' 
+          const pnlPct = currentPos.side === 'BUY'
             ? ((currentPrice - currentPos.entryPrice) / currentPos.entryPrice) * 100
             : ((currentPos.entryPrice - currentPrice) / currentPos.entryPrice) * 100;
-          
+
           const currentProfit = (pnlPct / 100) * Number(tradeVol);
           if (currentProfit > currentPos.peakProfit && currentProfit > 0) {
             currentPos.peakProfit = currentProfit;
@@ -1541,6 +1679,7 @@ export default function App() {
           let closeReason = '';
 
           // TP/SL
+<<<<<<< HEAD
           if (tpSlMode === 'PERCENTAGE') {
             const sl = currentPos.side === 'BUY' ? Number(slBuyPct) : Number(slSellPct);
             const tp = currentPos.side === 'BUY' ? Number(tpBuyPct) : Number(tpSellPct);
@@ -1559,6 +1698,13 @@ export default function App() {
             }
           }
           
+=======
+          const sl = currentPos.side === 'BUY' ? slBuy : slSell;
+          const tp = currentPos.side === 'BUY' ? tpBuy : tpSell;
+          if (tp > 0 && pnlPct >= tp) closeReason = 'Take Profit';
+          else if (sl > 0 && pnlPct <= -sl) closeReason = 'Stop Loss';
+
+>>>>>>> f6b4c9e (Auto-sync)
           // Trailing Stop
           if (!closeReason && currentPos.peakProfit > 0 && tStop > 0) {
             const initialValue = Number(tradeVol);
@@ -1877,7 +2023,7 @@ export default function App() {
       } catch (err: any) {
         attempt++;
         const isNetworkError = err.name === 'TypeError' || err.message.includes('Failed to fetch') || err.message.includes('NetworkError');
-        
+
         if (attempt > maxRetries || !isNetworkError) {
           console.error('API Fetch Error Details:', {
             path,
@@ -1952,6 +2098,38 @@ export default function App() {
     }
   };
 
+  const loadWallet = async () => {
+    try {
+      const data = await api('/api/wallet');
+      if (data.ok) {
+        setWallet({ balance: data.balance, transactions: data.transactions, depositAddress: data.depositAddress });
+      }
+    } catch (err: any) {
+      console.error("Wallet load error:", err);
+    }
+  };
+
+  const handleDeposit = async () => {
+    if (!depositTxid.trim()) {
+      setStatus({ msg: 'Please paste a Transaction Hash (TxID) first.', ok: false });
+      return;
+    }
+    setLoading(true);
+    setStatus({ msg: 'Verifying with TronScan...', ok: true });
+    try {
+      const data = await api('/api/wallet/deposit', { method: 'POST', body: { txid: depositTxid.trim() } });
+      if (data.ok) {
+        setStatus({ msg: `Successfully deposited ${data.amount.toFixed(2)} USDT!`, ok: true });
+        setDepositTxid('');
+        loadWallet();
+      }
+    } catch (err: any) {
+      setStatus({ msg: err.message, ok: false });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const addAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -2019,8 +2197,8 @@ export default function App() {
   const toggleGroup = async (groupName: string, enabled: boolean) => {
     const groupAccounts = accounts.filter(acc => (acc.group || 'Ungrouped') === groupName);
     try {
-      await Promise.all(groupAccounts.map(acc => 
-        api(`/api/accounts/${acc.id}/toggle`, { 
+      await Promise.all(groupAccounts.map(acc =>
+        api(`/api/accounts/${acc.id}/toggle`, {
           method: 'POST',
           body: { enabled } // Assuming the backend supports setting the state, otherwise we just toggle
         })
@@ -2046,7 +2224,7 @@ export default function App() {
     e.preventDefault();
     if (!editingAccount) return;
     try {
-      await api(`/api/accounts/${editingAccount.id}`, { 
+      await api(`/api/accounts/${editingAccount.id}`, {
         method: 'PATCH',
         body: { label: editAccLabel, group: editAccGroup }
       });
@@ -2114,7 +2292,7 @@ export default function App() {
   if (!token) {
     return (
       <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-xl"
@@ -2132,8 +2310,8 @@ export default function App() {
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Username</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -2143,8 +2321,8 @@ export default function App() {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Password</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -2152,8 +2330,8 @@ export default function App() {
                 required
               />
             </div>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-sky-500 hover:bg-sky-400 text-black font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
             >
@@ -2162,7 +2340,7 @@ export default function App() {
           </form>
 
           <div className="mt-6 text-center">
-            <button 
+            <button
               onClick={() => setIsRegistering(!isRegistering)}
               className="text-sm text-sky-400 hover:text-sky-300 transition-colors"
             >
@@ -2204,6 +2382,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+<<<<<<< HEAD
             <button 
               onClick={toggleAutoPilot}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
@@ -2230,12 +2409,26 @@ export default function App() {
               </span>
             </button>
             <button 
+=======
+            {liveOrders ? (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Live Trading Enabled</span>
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Simulation Mode</span>
+              </div>
+            )}
+            <button
+>>>>>>> f6b4c9e (Auto-sync)
               onClick={refreshAll}
               className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button 
+            <button
               onClick={logout}
               className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 rounded-xl transition-colors text-white/60 hover:text-red-400"
             >
@@ -2245,6 +2438,7 @@ export default function App() {
           </div>
         </header>
 
+<<<<<<< HEAD
         {/* Navigation */}
         <nav className="flex items-center gap-4 border-b border-white/5 pb-4">
           <button 
@@ -2687,11 +2881,119 @@ export default function App() {
                   <div className="w-full h-full flex flex-col items-center justify-center text-white/20">
                     <RefreshCw className="w-8 h-8 mb-2 animate-spin" />
                     <p className="text-xs">Loading chart data...</p>
+=======
+        {/* Tab Navigation */}
+        <div className="flex bg-white/5 border border-white/10 rounded-xl p-1 w-fit">
+          <button
+            onClick={() => setActiveTab('DASHBOARD')}
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-sky-500 text-black' : 'text-white/40 hover:text-white/80'}`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab('WALLET')}
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'WALLET' ? 'bg-sky-500 text-black' : 'text-white/40 hover:text-white/80'}`}
+          >
+            Internal Wallet
+          </button>
+        </div>
+
+        {activeTab === 'WALLET' ? (
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 lg:p-10 space-y-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-white/10">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Internal Prepaid Wallet</h2>
+                <p className="text-white/50 max-w-lg text-sm">
+                  The bot will automatically deduct the 30% performance fee directly from this balance instead of touching your Binance account.
+                  Keep a positive balance to allow the bot to continue trading.
+                </p>
+              </div>
+              <div className="text-right bg-black/40 p-6 rounded-2xl border border-white/5 min-w-[200px]">
+                <p className="text-xs text-white/40 uppercase tracking-wider mb-2">Available Balance</p>
+                <div className="text-4xl font-bold bg-gradient-to-r from-emerald-400 to-sky-400 bg-clip-text text-transparent">
+                  ${wallet.balance.toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <h3 className="font-bold border-l-2 border-sky-500 pl-3">Add Funds</h3>
+                <div className="bg-black/40 p-6 rounded-xl border border-white/5 space-y-4">
+                  <div className="p-4 bg-sky-500/10 border border-sky-500/20 rounded-xl relative">
+                    <p className="text-xs text-sky-400 uppercase tracking-wider mb-2 font-bold flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" /> Deposit USDT (TRC20 Network Only)
+                    </p>
+                    <p className="text-[10px] text-white/50 mb-2">Send USDT (Tron/TRC20) to this address. Ensure you only send TRC20, other networks will be lost.</p>
+                    <div className="flex bg-black/60 rounded-lg border border-white/10 p-2 items-center justify-between">
+                      <span className="font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap opacity-80 select-all pr-4">{wallet.depositAddress || "Loading..."}</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(wallet.depositAddress).then(() => alert('Address copied!'))}
+                        className="shrink-0 text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded"
+                      >
+                        COPY
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mt-4">
+                    <label className="block text-xs font-medium text-white/40 uppercase tracking-wider ml-1">Paste Transaction Hash (TxID)</label>
+                    <input
+                      type="text"
+                      value={depositTxid}
+                      onChange={(e) => setDepositTxid(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors font-mono text-sm"
+                      placeholder="e.g. 5d5a7114b7e..."
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleDeposit}
+                    disabled={loading || !depositTxid}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
+                  >
+                    <ShieldCheck className="w-5 h-5" />
+                    {loading ? 'Verifying with Blockchain...' : 'Verify & Claim Deposit'}
+                  </button>
+                </div>
+
+                {wallet.balance <= 0 && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex gap-3 text-red-400 text-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0" />
+                    <div>
+                      <strong>Wallet Empty!</strong>
+                      <p className="mt-1 opacity-80">The trading bot has been paused. Please top up your internal wallet to resume automated trading.</p>
+                    </div>
+>>>>>>> f6b4c9e (Auto-sync)
                   </div>
                 )}
               </div>
+
+              <div className="space-y-6">
+                <h3 className="font-bold border-l-2 border-amber-500 pl-3">Transaction History</h3>
+                <div className="bg-black/40 rounded-xl border border-white/5 overflow-hidden">
+                  {wallet.transactions.length === 0 ? (
+                    <div className="p-8 text-center text-white/20 text-sm">No transactions yet.</div>
+                  ) : (
+                    <div className="max-h-[300px] overflow-y-auto divide-y divide-white/5">
+                      {[...wallet.transactions].reverse().map(tx => (
+                        <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                          <div className="space-y-1">
+                            <p className="font-medium text-sm text-white/80">{tx.desc}</p>
+                            <p className="text-[10px] text-white/40">{new Date(tx.time).toLocaleString()}</p>
+                          </div>
+                          <div className={`font-bold font-mono ${tx.amount > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
+<<<<<<< HEAD
 
           {/* Right Column: Controls */}
           <div className="lg:col-span-4 space-y-6">
@@ -2839,21 +3141,48 @@ export default function App() {
                           onChange={(e) => setTradeVol(e.target.value)}
                           className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
                         />
+=======
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Accounts & Balances */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* Balances Grid */}
+              <div className="space-y-8">
+                {(Object.entries(
+                  accounts.reduce((groups: Record<string, Account[]>, acc) => {
+                    const group = acc.group || 'Ungrouped';
+                    if (!groups[group]) groups[group] = [];
+                    groups[group].push(acc);
+                    return groups;
+                  }, {})
+                ) as [string, Account[]][]).map(([groupName, groupAccs]) => (
+                  <div key={groupName} className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-2">
+                        <LayoutDashboard className="w-4 h-4 text-sky-400" />
+                        <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">{groupName}</h2>
+                        <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full text-white/40">{groupAccs.length}</span>
+>>>>>>> f6b4c9e (Auto-sync)
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Symbol</label>
-                        <SymbolSelector 
-                          selectedSymbol={selectedSymbol}
-                          setSelectedSymbol={setSelectedSymbol}
-                          symbols={symbols}
-                          symbolSearch={symbolSearch}
-                          setSymbolSearch={setSymbolSearch}
-                          isSymbolListOpen={isSymbolListOpen}
-                          setIsSymbolListOpen={setIsSymbolListOpen}
-                        />
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => toggleGroup(groupName, true)}
+                          className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-wider flex items-center gap-1"
+                        >
+                          <Play className="w-3 h-3" />
+                          Enable All
+                        </button>
+                        <button
+                          onClick={() => toggleGroup(groupName, false)}
+                          className="text-[10px] font-bold text-red-400 hover:text-red-300 transition-colors uppercase tracking-wider flex items-center gap-1"
+                        >
+                          <Square className="w-3 h-3" />
+                          Disable All
+                        </button>
                       </div>
                     </div>
 
+<<<<<<< HEAD
                     <div className="space-y-3 pt-2 border-t border-white/5">
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider ml-1">
@@ -3009,43 +3338,169 @@ export default function App() {
                     </div>
                   </>
                 )}
+=======
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {groupAccs.map((acc) => (
+                        <motion.div
+                          layout
+                          key={acc.id}
+                          className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${acc.enabled ? 'bg-emerald-500' : 'bg-white/20'}`} />
+                              <div>
+                                <h3 className="font-bold text-sm">{acc.label}</h3>
+                                <p className="text-[8px] text-white/30 uppercase tracking-wider font-mono">
+                                  Updated {new Date(lastUpdated).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => toggleAccount(acc.id)}
+                                className={`text-xs px-2 py-1 rounded-md transition-colors ${acc.enabled ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-white/40'}`}
+                              >
+                                {acc.enabled ? 'Enabled' : 'Disabled'}
+                              </button>
+                              <button
+                                onClick={() => deleteAccount(acc.id)}
+                                className="p-1.5 text-white/20 hover:text-red-400 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+>>>>>>> f6b4c9e (Auto-sync)
 
-                {market === 'SPOT' && (
-                  <div className="mb-4">
-                    <label className="block text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Symbol</label>
-                    <SymbolSelector 
-                      selectedSymbol={selectedSymbol}
-                      setSelectedSymbol={setSelectedSymbol}
-                      symbols={symbols}
-                      symbolSearch={symbolSearch}
-                      setSymbolSearch={setSymbolSearch}
-                      isSymbolListOpen={isSymbolListOpen}
-                      setIsSymbolListOpen={setIsSymbolListOpen}
-                    />
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium">Futures Balance</p>
+                              <p className="text-lg font-mono font-bold">
+                                {acc.futures ? `${acc.futures.walletBalance.toFixed(2)}` : '--'}
+                                <span className="text-[10px] ml-1 text-white/40">USDT</span>
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium">Unrealized PnL</p>
+                              <p className={`text-lg font-mono font-bold ${acc.futures && acc.futures.unrealizedProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {acc.futures ? `${acc.futures.unrealizedProfit >= 0 ? '+' : ''}${acc.futures.unrealizedProfit.toFixed(2)}` : '--'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {acc.errFut && (
+                            <div className="text-[10px] text-red-400/80 bg-red-400/5 p-2 rounded-lg border border-red-400/10">
+                              {formatError(acc.errFut)}
+                            </div>
+                          )}
+
+                          {acc.errSpot && (
+                            <div className="text-[10px] text-red-400/80 bg-red-400/5 p-2 rounded-lg border border-red-400/10 mt-2">
+                              {formatError(acc.errSpot)}
+                            </div>
+                          )}
+
+                          {/* Spot Balances */}
+                          {acc.spot && acc.spot.dollarTotal > 0 && (
+                            <div className="space-y-2 pt-2 border-t border-white/5 mt-2">
+                              <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold">Spot Assets</p>
+                              <div className="flex flex-wrap gap-2">
+                                {(Object.entries(acc.spot.dollarByAsset) as [string, number][]).map(([asset, val]) => (
+                                  val > 0 && (
+                                    <div key={asset} className="bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                                      <span className="text-[10px] font-bold mr-1">{asset}:</span>
+                                      <span className="text-[10px] font-mono text-sky-400">{val.toFixed(2)}</span>
+                                    </div>
+                                  )
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Open Positions */}
+                          {acc.futures?.positions && acc.futures.positions.length > 0 && (
+                            <div className="space-y-2 pt-2 border-t border-white/5">
+                              <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold">Open Positions</p>
+                              <div className="space-y-2">
+                                {acc.futures.positions.map((p, idx) => (
+                                  <div key={idx} className="bg-black/20 rounded-xl p-3 border border-white/5">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold">{p.symbol}</span>
+                                        <span className="text-[8px] bg-white/5 px-1 rounded text-white/40">{p.leverage}x</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex flex-col items-end">
+                                          <span className={`text-xs font-mono font-bold ${p.unrealizedProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {p.unrealizedProfit >= 0 ? '+' : ''}{p.unrealizedProfit.toFixed(2)} USDT
+                                          </span>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="flex items-center gap-1">
+                                              <span className="w-1 h-1 rounded-full bg-sky-500 animate-pulse" />
+                                              <span className="text-[8px] text-sky-500/50 uppercase font-bold tracking-tighter">Live PnL</span>
+                                            </span>
+                                            {peakProfitRef.current[`${acc.id}_${p.symbol}`] > 0 && (
+                                              <span className="text-[8px] font-mono text-white/30">
+                                                Peak: ${peakProfitRef.current[`${acc.id}_${p.symbol}`].toFixed(2)}
+                                              </span>
+                                            )}
+                                            <span className={`text-[10px] font-mono font-medium ${p.pnlPct >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'}`}>
+                                              {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <button
+                                          onClick={() => closePosition(acc.id, p.symbol)}
+                                          className="p-1.5 hover:bg-red-500/10 rounded-lg text-white/20 hover:text-red-400 transition-all"
+                                          title="Close Position"
+                                        >
+                                          <Square className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-[10px] text-white/40">
+                                      <div>
+                                        <p>Size</p>
+                                        <p className="text-white/80">{p.amount.toFixed(3)}</p>
+                                      </div>
+                                      <div>
+                                        <p>Entry</p>
+                                        <p className="text-white/80">{p.entryPrice.toFixed(2)}</p>
+                                      </div>
+                                      <div>
+                                        <p>Mark</p>
+                                        <p className="text-white/80">{p.markPrice.toFixed(2)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      ))}
+                    </div>
                   </div>
-                )}
+                ))}
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <button 
-                    onClick={() => executeTrade('BUY')}
-                    disabled={loading}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
-                  >
-                    BUY / LONG
-                  </button>
-                  <button 
-                    onClick={() => executeTrade('SELL')}
-                    disabled={loading}
-                    className="bg-red-500 hover:bg-red-400 text-black font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
-                  >
-                    SELL / SHORT
-                  </button>
-                </div>
+                {/* Add Account Card */}
+                <button
+                  onClick={() => (document.getElementById('add-account-modal') as HTMLDialogElement)?.showModal()}
+                  className="border-2 border-dashed border-white/5 hover:border-white/10 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 text-white/20 hover:text-white/40 transition-all group"
+                >
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Plus className="w-6 h-6" />
+                  </div>
+                  <span className="text-sm font-medium">Add New Account</span>
+                </button>
               </div>
 
-              <div className="pt-4 border-t border-white/5 space-y-4">
-                <div className="flex items-center justify-between">
+              {/* Market View */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 h-96 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
+<<<<<<< HEAD
                     <Bot className="w-4 h-4 text-sky-500" />
                     <div>
                       <h3 className="text-sm font-bold flex items-center gap-1.5">
@@ -3064,16 +3519,70 @@ export default function App() {
                         <option value="SCALPING">Scalping (Fast EMA/RSI)</option>
                       </select>
                     </div>
+=======
+                    <TrendingUp className="w-5 h-5 text-sky-400" />
+                    <h3 className="font-bold">
+                      {selectedSymbol}
+                      <span className={`ml-2 font-mono text-sm transition-colors duration-300 ${Number(currentPrice) > Number(prevPrice) ? 'text-emerald-400' :
+                          Number(currentPrice) < Number(prevPrice) ? 'text-red-400' : 'text-white/60'
+                        }`}>
+                        ${Number(currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </span>
+                      <span className="text-xs text-white/40 font-normal ml-1">1m Chart</span>
+                    </h3>
                   </div>
-                  <button 
-                    onClick={() => setAutoMode(!autoMode)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${autoMode ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' : 'bg-white/5 text-white/40'}`}
-                  >
-                    {autoMode ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
-                    {autoMode ? 'STOP' : 'START'}
-                  </button>
+                  <div className="flex items-center gap-3 text-[10px] mono text-white/40">
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Live
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1 w-full relative">
+                  {chartData.length > 0 ? (
+                    <CandlestickChart
+                      data={chartData}
+                      showMacd={useMacd}
+                      macdFast={Number(macdFast)}
+                      macdSlow={Number(macdSlow)}
+                      macdSignal={Number(macdSignal)}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white/20">
+                      <RefreshCw className="w-8 h-8 mb-2 animate-spin" />
+                      <p className="text-xs">Loading chart data...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Controls */}
+            <div className="lg:col-span-4 space-y-6">
+              {/* Trading Controls */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold flex items-center gap-2">
+                    <LayoutDashboard className="w-4 h-4 text-sky-500" />
+                    Terminal
+                  </h2>
+                  <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
+                    <button
+                      onClick={() => setMarket('FUTURES')}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${market === 'FUTURES' ? 'bg-sky-500 text-black' : 'text-white/40'}`}
+                    >
+                      FUTURES
+                    </button>
+                    <button
+                      onClick={() => setMarket('SPOT')}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${market === 'SPOT' ? 'bg-sky-500 text-black' : 'text-white/40'}`}
+                    >
+                      SPOT
+                    </button>
+>>>>>>> f6b4c9e (Auto-sync)
+                  </div>
                 </div>
 
+<<<<<<< HEAD
                 {autoMode && accounts.filter(a => a.enabled).length === 0 && (
                   <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 text-amber-400 text-[10px] leading-relaxed">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -3881,28 +4390,316 @@ export default function App() {
                                   </Tooltip>
                                 </label>
                                 <input type="number" value={rsiPeriod} onChange={e => setRsiPeriod(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+=======
+                <div className="space-y-4">
+                  {market === 'FUTURES' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                            Trade Volume (USD)
+                            <Tooltip text="Amount of USD to use for each trade. Must be within system limits ($5-$10).">
+                              <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                            </Tooltip>
+                          </label>
+                          <input
+                            type="number"
+                            value={tradeVol}
+                            onChange={(e) => setTradeVol(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Symbol</label>
+                          <SymbolSelector
+                            selectedSymbol={selectedSymbol}
+                            setSelectedSymbol={setSelectedSymbol}
+                            symbols={symbols}
+                            symbolSearch={symbolSearch}
+                            setSymbolSearch={setSymbolSearch}
+                            isSymbolListOpen={isSymbolListOpen}
+                            setIsSymbolListOpen={setIsSymbolListOpen}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                            TP on Buy (%)
+                            <Tooltip text="Target profit percentage for Long (Buy) positions.">
+                              <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                            </Tooltip>
+                          </label>
+                          <input
+                            type="number"
+                            value={tpBuyPct}
+                            onChange={(e) => setTpBuyPct(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                            TP on Sell (%)
+                            <Tooltip text="Target profit percentage for Short (Sell) positions.">
+                              <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                            </Tooltip>
+                          </label>
+                          <input
+                            type="number"
+                            value={tpSellPct}
+                            onChange={(e) => setTpSellPct(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                            SL on Buy (%)
+                            <Tooltip text="Stop loss percentage for Long (Buy) positions.">
+                              <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                            </Tooltip>
+                          </label>
+                          <input
+                            type="number"
+                            value={slBuyPct}
+                            onChange={(e) => setSlBuyPct(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                            SL on Sell (%)
+                            <Tooltip text="Stop loss percentage for Short (Sell) positions.">
+                              <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                            </Tooltip>
+                          </label>
+                          <input
+                            type="number"
+                            value={slSellPct}
+                            onChange={(e) => setSlSellPct(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {market === 'SPOT' && (
+                    <div className="mb-4">
+                      <label className="block text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Symbol</label>
+                      <SymbolSelector
+                        selectedSymbol={selectedSymbol}
+                        setSelectedSymbol={setSelectedSymbol}
+                        symbols={symbols}
+                        symbolSearch={symbolSearch}
+                        setSymbolSearch={setSymbolSearch}
+                        isSymbolListOpen={isSymbolListOpen}
+                        setIsSymbolListOpen={setIsSymbolListOpen}
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      onClick={() => executeTrade('BUY')}
+                      disabled={loading}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
+                    >
+                      BUY / LONG
+                    </button>
+                    <button
+                      onClick={() => executeTrade('SELL')}
+                      disabled={loading}
+                      className="bg-red-500 hover:bg-red-400 text-black font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
+                    >
+                      SELL / SHORT
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-sky-500" />
+                      <div>
+                        <h3 className="text-sm font-bold flex items-center gap-1.5">
+                          Auto Scalper
+                          <Tooltip text="Automated trading bot that executes trades based on technical indicators and risk management rules.">
+                            <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                          </Tooltip>
+                        </h3>
+                        <select
+                          value={strategy}
+                          onChange={(e) => setStrategy(e.target.value as any)}
+                          className="text-[10px] bg-transparent text-white/40 border-none focus:ring-0 p-0 cursor-pointer hover:text-white/60 transition-colors"
+                        >
+                          <option value="EMA_CROSS">EMA Crossover</option>
+                          <option value="RSI_REVERSION">RSI Mean Reversion</option>
+                          <option value="GRID_BOT">Grid Bot (Simulated)</option>
+                          <option value="DCA_BOT">DCA Accumulator</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex bg-sky-500/10 rounded-xl border border-sky-500/20 p-1 mb-4 hidden sm:flex">
+                      <button
+                        onClick={() => setAutopilot(!autopilot)}
+                        className={`flex-1 flex justify-center items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${autopilot ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20' : 'text-sky-400 hover:bg-sky-500/10'}`}
+                      >
+                        <Bot className="w-4 h-4" />
+                        AI AUTOPILOT: {autopilot ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setAutoMode(!autoMode)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${autoMode ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-sky-500 text-black shadow-lg shadow-sky-500/20'}`}
+                    >
+                      {autoMode ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
+                      {autoMode ? 'STOP' : 'START'}
+                    </button>
+                  </div>
+
+                  <AnimatePresence>
+                    {!autopilot ? (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-4 overflow-hidden"
+                      >
+                        {/* Section Tabs */}
+                        <div className="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                          {(['BASIC', 'RISK', 'INDICATORS', 'PRESETS', 'BACKTEST'] as const).map((s) => (
+                            <Tooltip key={s} text={
+                              s === 'BASIC' ? 'Core strategy parameters like EMA periods and entry conditions.' :
+                                s === 'RISK' ? 'Risk management settings including max duration and trailing stop.' :
+                                  s === 'INDICATORS' ? 'Advanced technical filters like RSI and MACD confirmation.' :
+                                    s === 'PRESETS' ? 'Quickly apply pre-configured strategy templates.' :
+                                      'Test your current strategy against historical data.'
+                            }>
+                              <button
+                                onClick={() => setOpenSection(s)}
+                                className={`w-full py-1.5 text-[9px] font-bold rounded-lg transition-all ${openSection === s
+                                    ? 'bg-sky-500 text-black shadow-lg shadow-sky-500/20'
+                                    : 'text-white/40 hover:text-white/60 hover:bg-white/5'
+                                  }`}
+                              >
+                                {s}
+                              </button>
+                            </Tooltip>
+                          ))}
+                        </div>
+
+                        <AnimatePresence mode="wait">
+                          {openSection === 'BACKTEST' && (
+                            <motion.div
+                              key="backtest"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              className="space-y-4"
+                            >
+                              <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Backtest Period (Days)</label>
+                                  <select
+                                    value={backtestDays}
+                                    onChange={(e) => setBacktestDays(e.target.value)}
+                                    className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:border-sky-500/50"
+                                  >
+                                    <option value="1">1 Day</option>
+                                    <option value="3">3 Days</option>
+                                    <option value="7">7 Days</option>
+                                  </select>
+                                </div>
+
+                                <button
+                                  onClick={runBacktest}
+                                  disabled={backtestLoading}
+                                  className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-black font-bold py-2 rounded-lg text-[10px] transition-all flex items-center justify-center gap-2"
+                                >
+                                  {backtestLoading ? (
+                                    <>
+                                      <RefreshCw className="w-3 h-3 animate-spin" />
+                                      Running Simulation...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="w-3 h-3" />
+                                      Start Backtest
+                                    </>
+                                  )}
+                                </button>
+>>>>>>> f6b4c9e (Auto-sync)
                               </div>
-                              <div>
-                                <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
-                                  Overbought
-                                  <Tooltip text="RSI level for sell confirmation.">
-                                    <Info className="w-2.5 h-2.5" />
-                                  </Tooltip>
-                                </label>
-                                <input type="number" value={rsiOverbought} onChange={e => setRsiOverbought(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
-                              </div>
-                              <div>
-                                <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
-                                  Oversold
-                                  <Tooltip text="RSI level for buy confirmation.">
-                                    <Info className="w-2.5 h-2.5" />
-                                  </Tooltip>
-                                </label>
-                                <input type="number" value={rsiOversold} onChange={e => setRsiOversold(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
-                              </div>
-                            </div>
+
+                              {backtestResults && (
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                      <p className="text-[9px] text-white/40 uppercase mb-1">Win Rate</p>
+                                      <p className={`text-sm font-bold ${backtestResults.stats.winRate >= 50 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {backtestResults.stats.winRate.toFixed(1)}%
+                                      </p>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                      <p className="text-[9px] text-white/40 uppercase mb-1">Total PnL</p>
+                                      <p className={`text-sm font-bold ${backtestResults.stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        ${backtestResults.stats.totalPnl.toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                      <p className="text-[9px] text-white/40 uppercase mb-1">Total Trades</p>
+                                      <p className="text-sm font-bold text-white/80">{backtestResults.stats.totalTrades}</p>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                      <p className="text-[9px] text-white/40 uppercase mb-1">Avg Trade</p>
+                                      <p className={`text-sm font-bold ${backtestResults.stats.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        ${backtestResults.stats.avgPnl.toFixed(2)}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                                    <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex items-center justify-between">
+                                      <span className="text-[9px] font-bold text-white/60 uppercase">Recent Backtest Trades</span>
+                                      <span className="text-[9px] text-white/40">{backtestResults.trades.length} trades</span>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                      {backtestResults.trades.length > 0 ? (
+                                        <table className="w-full text-[9px]">
+                                          <thead className="bg-black/20 text-white/40 sticky top-0">
+                                            <tr>
+                                              <th className="px-3 py-2 text-left font-medium">Side</th>
+                                              <th className="px-3 py-2 text-left font-medium">PnL</th>
+                                              <th className="px-3 py-2 text-left font-medium">Reason</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-white/5">
+                                            {backtestResults.trades.slice().reverse().map((t, i) => (
+                                              <tr key={i} className="hover:bg-white/5 transition-colors">
+                                                <td className={`px-3 py-2 font-bold ${t.side === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                  {t.side}
+                                                </td>
+                                                <td className={`px-3 py-2 font-mono ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                  {t.pnl >= 0 ? '+' : ''}{t.pnl.toFixed(2)}
+                                                </td>
+                                                <td className="px-3 py-2 text-white/40">{t.reason}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      ) : (
+                                        <div className="p-8 text-center text-white/20 text-[10px]">No trades executed in this period</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </motion.div>
                           )}
 
+<<<<<<< HEAD
                           <div className="flex items-center justify-between">
                             <label className="flex items-center gap-2 cursor-pointer">
                               <input type="checkbox" checked={useRsiDivergence} onChange={e => setUseRsiDivergence(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
@@ -3970,57 +4767,53 @@ export default function App() {
                                 <p className="text-[9px] text-sky-400/80 leading-relaxed">
                                   <span className="font-bold">Signal Rule:</span> BUY requires positive histogram (bullish momentum). SELL requires negative histogram (bearish momentum).
                                 </p>
+=======
+                          {openSection === 'PRESETS' && (
+                            <motion.div
+                              key="presets"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              className="space-y-3"
+                            >
+                              <div className="grid grid-cols-1 gap-2">
+                                {PRESETS_DATA.map((preset) => (
+                                  <button
+                                    key={preset.name}
+                                    onClick={() => {
+                                      if (preset.params.emaShort) setEmaShort(preset.params.emaShort);
+                                      if (preset.params.emaLong) setEmaLong(preset.params.emaLong);
+                                      if (preset.params.tpBuyPct) setTpBuyPct(preset.params.tpBuyPct);
+                                      if (preset.params.tpSellPct) setTpSellPct(preset.params.tpSellPct);
+                                      if (preset.params.slPct) {
+                                        setSlPct(preset.params.slPct);
+                                        setSlBuyPct(preset.params.slPct);
+                                        setSlSellPct(preset.params.slPct);
+                                      }
+                                      if (preset.params.maxDuration) setMaxDuration(preset.params.maxDuration);
+                                      if (preset.params.trailingStop) setTrailingStop(preset.params.trailingStop);
+                                      if (preset.params.profitFloor) setProfitFloorPct(preset.params.profitFloor);
+                                      if (preset.params.strategy) setStrategy(preset.params.strategy);
+                                      if (preset.params.rsiPeriod) setRsiPeriod(preset.params.rsiPeriod);
+                                      if (preset.params.rsiOversold) setRsiOversold(preset.params.rsiOversold);
+                                      if (preset.params.rsiOverbought) setRsiOverbought(preset.params.rsiOverbought);
+                                      setStatus({ msg: `${preset.name} preset applied`, ok: true });
+                                    }}
+                                    className="group flex flex-col items-start p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-left"
+                                  >
+                                    <span className="text-[11px] font-bold text-sky-400 group-hover:text-sky-300 transition-colors uppercase tracking-wider">
+                                      {preset.name}
+                                    </span>
+                                    <span className="text-[9px] text-white/40 mt-1 leading-relaxed">
+                                      {preset.desc}
+                                    </span>
+                                  </button>
+                                ))}
+>>>>>>> f6b4c9e (Auto-sync)
                               </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                  <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
-                                    Fast
-                                    <Tooltip text="Short-term EMA period for MACD. Default is 12.">
-                                      <Info className="w-2.5 h-2.5" />
-                                    </Tooltip>
-                                  </label>
-                                  <input type="number" value={macdFast} onChange={e => setMacdFast(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
-                                </div>
-                                <div>
-                                  <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
-                                    Slow
-                                    <Tooltip text="Long-term EMA period for MACD. Default is 26.">
-                                      <Info className="w-2.5 h-2.5" />
-                                    </Tooltip>
-                                  </label>
-                                  <input type="number" value={macdSlow} onChange={e => setMacdSlow(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
-                                </div>
-                                <div>
-                                  <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
-                                    Signal
-                                    <Tooltip text="EMA period of the MACD line. Default is 9.">
-                                      <Info className="w-2.5 h-2.5" />
-                                    </Tooltip>
-                                  </label>
-                                  <input type="number" value={macdSignal} onChange={e => setMacdSignal(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
-                                  <p className="text-[7px] text-white/30 uppercase">MACD</p>
-                                  <p className="text-[9px] font-mono font-bold text-sky-400">{currentMacd.macdLine.toFixed(4)}</p>
-                                </div>
-                                <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
-                                  <p className="text-[7px] text-white/30 uppercase">Signal</p>
-                                  <p className="text-[9px] font-mono font-bold text-amber-400">{currentMacd.signalLine.toFixed(4)}</p>
-                                </div>
-                                <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
-                                  <p className="text-[7px] text-white/30 uppercase">Histogram</p>
-                                  <p className={`text-[9px] font-mono font-bold ${currentMacd.histogram > 0 ? 'text-emerald-400' : currentMacd.histogram < 0 ? 'text-rose-400' : 'text-white/40'}`}>
-                                    {currentMacd.histogram.toFixed(4)}
-                                  </p>
-                                </div>
-                              </div>
-                              <p className="text-[9px] text-white/30 italic">
-                                Histogram must be positive for BUY and negative for SELL.
-                              </p>
-                            </div>
+                            </motion.div>
                           )}
+<<<<<<< HEAD
                         </div>
                       </div>
                     </AccordionSection>
@@ -4034,32 +4827,519 @@ export default function App() {
                   </div>
                   <div className="mt-1 text-[10px] mono text-white/30 truncate">
                     {autoMode ? `Monitoring ${selectedSymbol} (${strategy})...` : 'Waiting for activation...'}
+=======
+
+                          {openSection === 'BASIC' && (
+                            <motion.div
+                              key="basic"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              className="space-y-3"
+                            >
+                              {(strategy === 'EMA_CROSS' || strategy === 'RSI_REVERSION') ? (
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                      EMA Short
+                                      <Tooltip text="Period for the fast Exponential Moving Average. Typically 9 or 12.">
+                                        <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                      </Tooltip>
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={emaShort}
+                                      onChange={(e) => setEmaShort(e.target.value)}
+                                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                      EMA Long
+                                      <Tooltip text="Period for the slow Exponential Moving Average. Typically 21 or 26.">
+                                        <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                      </Tooltip>
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={emaLong}
+                                      onChange={(e) => setEmaLong(e.target.value)}
+                                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                    />
+                                  </div>
+                                </div>
+                              ) : strategy === 'GRID_BOT' ? (
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    Grid Step %
+                                    <Tooltip text="Percentage distance between grids. Triggers a buy/sell when price moves this much from last grid.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={gridStepPct}
+                                    onChange={(e) => setGridStepPct(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                              ) : strategy === 'DCA_BOT' ? (
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    Buy Interval (minutes)
+                                    <Tooltip text="How often to automatically accumulate the trade volume dollar amount.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={dcaInterval}
+                                    onChange={(e) => setDcaInterval(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                              ) : null}
+                              <div>
+                                <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                  Direction / Condition
+                                  <Tooltip text="For signals, whether to buy or sell. For DCA, whether to accumulate Longs or Shorts.">
+                                    <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                  </Tooltip>
+                                </label>
+                                <select
+                                  value={crossCond}
+                                  onChange={(e) => setCrossCond(e.target.value as any)}
+                                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors appearance-none"
+                                >
+                                  <option value="UP">{strategy === 'DCA_BOT' || strategy === 'GRID_BOT' ? 'Bullish Bias (BUY/LONG)' : 'Short crosses Long UP (BUY)'}</option>
+                                  <option value="DOWN">{strategy === 'DCA_BOT' || strategy === 'GRID_BOT' ? 'Bearish Bias (SELL/SHORT)' : 'Short crosses Long DOWN (SELL)'}</option>
+                                </select>
+                              </div>
+                            </motion.div>
+                          )}
+
+                          {openSection === 'RISK' && (
+                            <motion.div
+                              key="risk"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              className="space-y-3"
+                            >
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    Max Duration (min)
+                                    <Tooltip text="Defines the maximum time (in minutes) a position can remain open before being automatically closed.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={maxDuration}
+                                    onChange={(e) => setMaxDuration(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    Trailing Stop Loss (%)
+                                    <Tooltip text="Percentage of peak profit to trail. If profit drops by this much from its peak, the trade closes.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={trailingStop}
+                                    onChange={(e) => setTrailingStop(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    Profit Floor (%)
+                                    <Tooltip text="Closes the position if unrealized profit drops below this percentage of the initial trade value. Only activates once profit has exceeded this threshold.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={profitFloorPct}
+                                    onChange={(e) => setProfitFloorPct(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    TP on Buy (%)
+                                    <Tooltip text="Target profit percentage for Long (Buy) positions.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={tpBuyPct}
+                                    onChange={(e) => setTpBuyPct(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    TP on Sell (%)
+                                    <Tooltip text="Target profit percentage for Short (Sell) positions.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={tpSellPct}
+                                    onChange={(e) => setTpSellPct(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    SL on Buy (%)
+                                    <Tooltip text="Stop loss percentage for Long (Buy) positions.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={slBuyPct}
+                                    onChange={(e) => setSlBuyPct(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">
+                                    SL on Sell (%)
+                                    <Tooltip text="Stop loss percentage for Short (Sell) positions.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={slSellPct}
+                                    onChange={(e) => setSlSellPct(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sky-500/50 transition-colors"
+                                  />
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+
+                          {openSection === 'INDICATORS' && (
+                            <motion.div
+                              key="indicators"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              className="space-y-3"
+                            >
+                              <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={useRsi} onChange={e => setUseRsi(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
+                                    <span className="text-[10px] font-bold text-white/60">RSI Confirmation</span>
+                                    <Tooltip text="Use Relative Strength Index to confirm entry signals.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                </div>
+                                {useRsi && (
+                                  <div className="grid grid-cols-3 gap-2 pl-6">
+                                    <div>
+                                      <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                        Period
+                                        <Tooltip text="Number of candles used to calculate RSI.">
+                                          <Info className="w-2.5 h-2.5" />
+                                        </Tooltip>
+                                      </label>
+                                      <input type="number" value={rsiPeriod} onChange={e => setRsiPeriod(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+                                    </div>
+                                    <div>
+                                      <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                        Overbought
+                                        <Tooltip text="RSI level for sell confirmation.">
+                                          <Info className="w-2.5 h-2.5" />
+                                        </Tooltip>
+                                      </label>
+                                      <input type="number" value={rsiOverbought} onChange={e => setRsiOverbought(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+                                    </div>
+                                    <div>
+                                      <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                        Oversold
+                                        <Tooltip text="RSI level for buy confirmation.">
+                                          <Info className="w-2.5 h-2.5" />
+                                        </Tooltip>
+                                      </label>
+                                      <input type="number" value={rsiOversold} onChange={e => setRsiOversold(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={useRsiDivergence} onChange={e => setUseRsiDivergence(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
+                                    <span className="text-[10px] font-bold text-white/60">RSI Divergence Filter</span>
+                                    <Tooltip text="Only enter trades when RSI divergence (Bullish for BUY, Bearish for SELL) is detected against price action.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={useMacd} onChange={e => setUseMacd(e.target.checked)} className="rounded border-white/10 bg-black/40 text-sky-500" />
+                                    <span className="text-[10px] font-bold text-white/60">MACD Histogram Filter</span>
+                                    <Tooltip text="Momentum Confirmation: BUY only if Histogram > 0, SELL only if Histogram < 0.">
+                                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                                    </Tooltip>
+                                  </label>
+                                </div>
+                                {useMacd && (
+                                  <div className="pl-6 space-y-3">
+                                    <div className="bg-sky-500/5 border border-sky-500/10 rounded-lg p-2 mb-2">
+                                      <p className="text-[9px] text-sky-400/80 leading-relaxed">
+                                        <span className="font-bold">Signal Rule:</span> BUY requires positive histogram (bullish momentum). SELL requires negative histogram (bearish momentum).
+                                      </p>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div>
+                                        <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                          Fast
+                                          <Tooltip text="Short-term EMA period for MACD. Default is 12.">
+                                            <Info className="w-2.5 h-2.5" />
+                                          </Tooltip>
+                                        </label>
+                                        <input type="number" value={macdFast} onChange={e => setMacdFast(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+                                      </div>
+                                      <div>
+                                        <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                          Slow
+                                          <Tooltip text="Long-term EMA period for MACD. Default is 26.">
+                                            <Info className="w-2.5 h-2.5" />
+                                          </Tooltip>
+                                        </label>
+                                        <input type="number" value={macdSlow} onChange={e => setMacdSlow(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+                                      </div>
+                                      <div>
+                                        <label className="flex items-center gap-1 text-[8px] text-white/30 uppercase mb-1">
+                                          Signal
+                                          <Tooltip text="EMA period of the MACD line. Default is 9.">
+                                            <Info className="w-2.5 h-2.5" />
+                                          </Tooltip>
+                                        </label>
+                                        <input type="number" value={macdSignal} onChange={e => setMacdSignal(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px]" />
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
+                                        <p className="text-[7px] text-white/30 uppercase">MACD</p>
+                                        <p className="text-[9px] font-mono font-bold text-sky-400">{currentMacd.macdLine.toFixed(4)}</p>
+                                      </div>
+                                      <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
+                                        <p className="text-[7px] text-white/30 uppercase">Signal</p>
+                                        <p className="text-[9px] font-mono font-bold text-amber-400">{currentMacd.signalLine.toFixed(4)}</p>
+                                      </div>
+                                      <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 text-center">
+                                        <p className="text-[7px] text-white/30 uppercase">Histogram</p>
+                                        <p className={`text-[9px] font-mono font-bold ${currentMacd.histogram > 0 ? 'text-emerald-400' : currentMacd.histogram < 0 ? 'text-rose-400' : 'text-white/40'}`}>
+                                          {currentMacd.histogram.toFixed(4)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <p className="text-[9px] text-white/30 italic">
+                                      Histogram must be positive for BUY and negative for SELL.
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="p-4 bg-sky-500/5 rounded-xl border border-sky-500/20 text-center space-y-2"
+                      >
+                        <Bot className="w-8 h-8 text-sky-400 mx-auto mb-2 opacity-50" />
+                        <p className="text-xs font-bold text-sky-400 uppercase tracking-widest">Autopilot Active</p>
+                        <p className="text-[10px] text-white/40">AI is dynamically managing limits, risk duration, trade volume, and strategies.</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="bg-black/40 rounded-xl p-3 border border-white/5">
+                    <div className="flex items-center justify-between text-[10px] mono text-white/60">
+                      <span>Status:</span>
+                      <span className={autoMode ? 'text-sky-400 animate-pulse' : ''}>{autoMode ? 'RUNNING' : 'IDLE'}</span>
+                    </div>
+                    <div className="mt-1 text-[10px] mono text-white/30 truncate">
+                      {autoMode ? `Monitoring ${selectedSymbol} (${strategy})...` : 'Waiting for activation...'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bot Performance Statistics */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+                  <h2 className="font-bold flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-sky-500" />
+                    Bot Performance
+                    <Tooltip text="Overall performance metrics for the current session. Resets on page refresh.">
+                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                    </Tooltip>
+                  </h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Total Trades</p>
+                      <p className="text-lg font-mono font-bold">{botStats.trades}</p>
+                    </div>
+                    <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Win Rate</p>
+                      <p className="text-lg font-mono font-bold">
+                        {botStats.trades > 0 ? ((botStats.wins / botStats.trades) * 100).toFixed(1) : '0.0'}%
+                      </p>
+                    </div>
+                    <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Wins / Losses</p>
+                      <p className="text-lg font-mono font-bold">
+                        <span className="text-emerald-400">{botStats.wins}</span>
+                        <span className="text-white/20 mx-1">/</span>
+                        <span className="text-red-400">{botStats.losses}</span>
+                      </p>
+                    </div>
+                    <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Total PnL</p>
+                      <p className={`text-lg font-mono font-bold ${botStats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {botStats.totalPnl >= 0 ? '+' : ''}{botStats.totalPnl.toFixed(2)}
+                        <span className="text-[10px] ml-1 text-white/40">USDT</span>
+                      </p>
+                    </div>
+>>>>>>> f6b4c9e (Auto-sync)
                   </div>
                 </div>
               </div>
 
-              {/* Bot Performance Statistics */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
-                <h2 className="font-bold flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-sky-500" />
+              {/* Order Book */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col h-[400px]">
+                <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                  <h3 className="text-xs font-bold flex items-center gap-2 uppercase tracking-wider text-white/60">
+                    <BarChart2 className="w-3.5 h-3.5 text-sky-400" />
+                    Order Book
+                  </h3>
+                  <span className="text-[10px] font-mono text-white/40">{selectedSymbol}</span>
+                </div>
+
+                <div className="flex-1 grid grid-rows-2 overflow-hidden">
+                  {/* Asks (Sells) - Red */}
+                  <div className="flex flex-col-reverse overflow-hidden border-b border-white/5">
+                    {orderBook.asks.map(([price, qty], i) => {
+                      const maxQty = Math.max(...orderBook.asks.map(a => Number(a[1])), ...orderBook.bids.map(b => Number(b[1])));
+                      const width = (Number(qty) / maxQty) * 100;
+                      return (
+                        <div key={`ask-${i}`} className="relative flex items-center justify-between px-4 py-1 text-[10px] group hover:bg-white/5 transition-colors">
+                          <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 transition-all duration-500" style={{ width: `${width}%` }} />
+                          <span className="relative font-mono text-red-400">{Number(price).toFixed(2)}</span>
+                          <span className="relative font-mono text-white/60">{Number(qty).toFixed(4)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Bids (Buys) - Green */}
+                  <div className="flex flex-col overflow-hidden">
+                    {orderBook.bids.map(([price, qty], i) => {
+                      const maxQty = Math.max(...orderBook.asks.map(a => Number(a[1])), ...orderBook.bids.map(b => Number(b[1])));
+                      const width = (Number(qty) / maxQty) * 100;
+                      return (
+                        <div key={`bid-${i}`} className="relative flex items-center justify-between px-4 py-1 text-[10px] group hover:bg-white/5 transition-colors">
+                          <div className="absolute right-0 top-0 bottom-0 bg-emerald-500/10 transition-all duration-500" style={{ width: `${width}%` }} />
+                          <span className="relative font-mono text-emerald-400">{Number(price).toFixed(2)}</span>
+                          <span className="relative font-mono text-white/60">{Number(qty).toFixed(4)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-black/20 border-t border-white/10 flex items-center justify-between text-[10px]">
+                  <span className="text-white/40">Spread</span>
+                  <span className="font-mono text-white/80">
+                    {orderBook.asks.length > 0 && orderBook.bids.length > 0
+                      ? (Number(orderBook.asks[0][0]) - Number(orderBook.bids[0][0])).toFixed(2)
+                      : '0.00'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Bot Activity Logs */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col h-64">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-sky-500" />
+                    Bot Activity
+                    <Tooltip text="Real-time log of bot actions, signal detections, and trade executions.">
+                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                    </Tooltip>
+                  </h2>
+                  <button
+                    onClick={() => setBotLogs([])}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 rounded-lg transition-all text-[10px] font-bold text-white/40 hover:text-red-400 group"
+                  >
+                    <Trash2 className="w-3 h-3 text-white/20 group-hover:text-red-400 transition-colors" />
+                    Clear Logs
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+                  {botLogs.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-[10px] text-white/20 italic">
+                      No activity recorded yet
+                    </div>
+                  ) : (
+                    botLogs.map((log, i) => (
+                      <div key={i} className="text-[10px] flex gap-2 items-start animate-in fade-in slide-in-from-left-2 duration-300">
+                        <span className="text-white/20 font-mono shrink-0">
+                          {new Date(log.time).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                        <span className={`font-medium ${log.type === 'success' ? 'text-emerald-400' :
+                            log.type === 'error' ? 'text-red-400' : 'text-sky-400'
+                          }`}>
+                          {log.msg}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Bot Performance */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                <h2 className="font-bold flex items-center gap-2 mb-4">
+                  <TrendingUp className="w-4 h-4 text-sky-500" />
                   Bot Performance
-                  <Tooltip text="Overall performance metrics for the current session. Resets on page refresh.">
+                  <Tooltip text="Cumulative statistics of the bot's trading performance since activation.">
                     <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                   </Tooltip>
                 </h2>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Total Trades</p>
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Total Trades</p>
                     <p className="text-lg font-mono font-bold">{botStats.trades}</p>
                   </div>
                   <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Win Rate</p>
-                    <p className="text-lg font-mono font-bold">
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Win Rate</p>
+                    <p className="text-lg font-mono font-bold text-emerald-400">
                       {botStats.trades > 0 ? ((botStats.wins / botStats.trades) * 100).toFixed(1) : '0.0'}%
                     </p>
                   </div>
                   <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Wins / Losses</p>
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Wins / Losses</p>
                     <p className="text-lg font-mono font-bold">
                       <span className="text-emerald-400">{botStats.wins}</span>
                       <span className="text-white/20 mx-1">/</span>
@@ -4067,7 +5347,7 @@ export default function App() {
                     </p>
                   </div>
                   <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                    <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1">Total PnL</p>
+                    <p className="text-[10px] text-white/40 uppercase mb-1">Total PnL</p>
                     <p className={`text-lg font-mono font-bold ${botStats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {botStats.totalPnl >= 0 ? '+' : ''}{botStats.totalPnl.toFixed(2)}
                       <span className="text-[10px] ml-1 text-white/40">USDT</span>
@@ -4075,171 +5355,41 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Order Book */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col h-[400px]">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                <h3 className="text-xs font-bold flex items-center gap-2 uppercase tracking-wider text-white/60">
-                  <BarChart2 className="w-3.5 h-3.5 text-sky-400" />
-                  Order Book
-                </h3>
-                <span className="text-[10px] font-mono text-white/40">{selectedSymbol}</span>
-              </div>
-              
-              <div className="flex-1 grid grid-rows-2 overflow-hidden">
-                {/* Asks (Sells) - Red */}
-                <div className="flex flex-col-reverse overflow-hidden border-b border-white/5">
-                  {orderBook.asks.map(([price, qty], i) => {
-                    const maxQty = Math.max(...orderBook.asks.map(a => Number(a[1])), ...orderBook.bids.map(b => Number(b[1])));
-                    const width = (Number(qty) / maxQty) * 100;
-                    return (
-                      <div key={`ask-${i}`} className="relative flex items-center justify-between px-4 py-1 text-[10px] group hover:bg-white/5 transition-colors">
-                        <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 transition-all duration-500" style={{ width: `${width}%` }} />
-                        <span className="relative font-mono text-red-400">{Number(price).toFixed(2)}</span>
-                        <span className="relative font-mono text-white/60">{Number(qty).toFixed(4)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Bids (Buys) - Green */}
-                <div className="flex flex-col overflow-hidden">
-                  {orderBook.bids.map(([price, qty], i) => {
-                    const maxQty = Math.max(...orderBook.asks.map(a => Number(a[1])), ...orderBook.bids.map(b => Number(b[1])));
-                    const width = (Number(qty) / maxQty) * 100;
-                    return (
-                      <div key={`bid-${i}`} className="relative flex items-center justify-between px-4 py-1 text-[10px] group hover:bg-white/5 transition-colors">
-                        <div className="absolute right-0 top-0 bottom-0 bg-emerald-500/10 transition-all duration-500" style={{ width: `${width}%` }} />
-                        <span className="relative font-mono text-emerald-400">{Number(price).toFixed(2)}</span>
-                        <span className="relative font-mono text-white/60">{Number(qty).toFixed(4)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="p-3 bg-black/20 border-t border-white/10 flex items-center justify-between text-[10px]">
-                <span className="text-white/40">Spread</span>
-                <span className="font-mono text-white/80">
-                  {orderBook.asks.length > 0 && orderBook.bids.length > 0 
-                    ? (Number(orderBook.asks[0][0]) - Number(orderBook.bids[0][0])).toFixed(2)
-                    : '0.00'}
-                </span>
-              </div>
-            </div>
-
-            {/* Bot Activity Logs */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col h-64">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-sky-500" />
-                  Bot Activity
-                  <Tooltip text="Real-time log of bot actions, signal detections, and trade executions.">
+              {/* Quick Stats */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                <h2 className="font-bold flex items-center gap-2 mb-4">
+                  <Settings className="w-4 h-4 text-sky-500" />
+                  System Info
+                  <Tooltip text="General system status and configuration limits.">
                     <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
                   </Tooltip>
                 </h2>
-                <button 
-                  onClick={() => setBotLogs([])}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 rounded-lg transition-all text-[10px] font-bold text-white/40 hover:text-red-400 group"
-                >
-                  <Trash2 className="w-3 h-3 text-white/20 group-hover:text-red-400 transition-colors" />
-                  Clear Logs
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
-                {botLogs.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-[10px] text-white/20 italic">
-                    No activity recorded yet
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/40 flex items-center gap-1.5">
+                      Live Trading
+                      <Tooltip text="When enabled, the bot will execute real trades on your Binance accounts. When disabled, it only monitors signals.">
+                        <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
+                      </Tooltip>
+                    </span>
+                    <span className={`${liveOrders ? 'text-emerald-400' : 'text-red-400'} font-mono font-bold`}>
+                      {liveOrders ? 'ENABLED' : 'DISABLED'}
+                    </span>
                   </div>
-                ) : (
-                  botLogs.map((log, i) => (
-                    <div key={i} className="text-[10px] flex gap-2 items-start animate-in fade-in slide-in-from-left-2 duration-300">
-                      <span className="text-white/20 font-mono shrink-0">
-                        {new Date(log.time).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </span>
-                      <span className={`font-medium ${
-                        log.type === 'success' ? 'text-emerald-400' : 
-                        log.type === 'error' ? 'text-red-400' : 'text-sky-400'
-                      }`}>
-                        {log.msg}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Bot Performance */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-              <h2 className="font-bold flex items-center gap-2 mb-4">
-                <TrendingUp className="w-4 h-4 text-sky-500" />
-                Bot Performance
-                <Tooltip text="Cumulative statistics of the bot's trading performance since activation.">
-                  <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
-                </Tooltip>
-              </h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                  <p className="text-[10px] text-white/40 uppercase mb-1">Total Trades</p>
-                  <p className="text-lg font-mono font-bold">{botStats.trades}</p>
-                </div>
-                <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                  <p className="text-[10px] text-white/40 uppercase mb-1">Win Rate</p>
-                  <p className="text-lg font-mono font-bold text-emerald-400">
-                    {botStats.trades > 0 ? ((botStats.wins / botStats.trades) * 100).toFixed(1) : '0.0'}%
-                  </p>
-                </div>
-                <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                  <p className="text-[10px] text-white/40 uppercase mb-1">Wins / Losses</p>
-                  <p className="text-lg font-mono font-bold">
-                    <span className="text-emerald-400">{botStats.wins}</span>
-                    <span className="text-white/20 mx-1">/</span>
-                    <span className="text-red-400">{botStats.losses}</span>
-                  </p>
-                </div>
-                <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                  <p className="text-[10px] text-white/40 uppercase mb-1">Total PnL</p>
-                  <p className={`text-lg font-mono font-bold ${botStats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {botStats.totalPnl >= 0 ? '+' : ''}{botStats.totalPnl.toFixed(2)}
-                    <span className="text-[10px] ml-1 text-white/40">USDT</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-              <h2 className="font-bold flex items-center gap-2 mb-4">
-                <Settings className="w-4 h-4 text-sky-500" />
-                System Info
-                <Tooltip text="General system status and configuration limits.">
-                  <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
-                </Tooltip>
-              </h2>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-white/40 flex items-center gap-1.5">
-                    Live Trading
-                    <Tooltip text="When enabled, the bot will execute real trades on your Binance accounts. When disabled, it only monitors signals.">
-                      <Info className="w-3 h-3 text-white/20 hover:text-sky-400 transition-colors cursor-help" />
-                    </Tooltip>
-                  </span>
-                  <span className={`${liveOrders ? 'text-emerald-400' : 'text-red-400'} font-mono font-bold`}>
-                    {liveOrders ? 'ENABLED' : 'DISABLED'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-white/40">Trade Limit</span>
-                  <span className="text-white/80 font-mono">${tradeLimits.min.toFixed(2)} - ${tradeLimits.max.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-white/40">Active Accounts</span>
-                  <span className="text-white/80 font-mono">{accounts.filter(a => a.enabled).length}</span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/40">Trade Limit</span>
+                    <span className="text-white/80 font-mono">${tradeLimits.min.toFixed(2)} - ${tradeLimits.max.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/40">Active Accounts</span>
+                    <span className="text-white/80 font-mono">{accounts.filter(a => a.enabled).length}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+<<<<<<< HEAD
         </div>
       ) : (
           <div className="space-y-6">
@@ -4460,6 +5610,10 @@ export default function App() {
             </div>
           </div>
         )}
+=======
+        )}
+      </div>
+>>>>>>> f6b4c9e (Auto-sync)
 
       {/* Add Account Modal */}
       <dialog id="add-account-modal" className="bg-transparent backdrop:bg-black/80 p-0">
@@ -4468,8 +5622,8 @@ export default function App() {
           <form onSubmit={addAccount} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Label</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={newAccLabel}
                 onChange={(e) => setNewAccLabel(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -4478,8 +5632,8 @@ export default function App() {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Group (Optional)</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={newAccGroup}
                 onChange={(e) => setNewAccGroup(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -4488,6 +5642,7 @@ export default function App() {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">API Key</label>
+<<<<<<< HEAD
               <div className="relative">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20">
                   <Key className="w-4 h-4" />
@@ -4517,6 +5672,31 @@ export default function App() {
                   required
                 />
               </div>
+=======
+              <input
+                type="text"
+                value={newAccKey}
+                onChange={(e) => setNewAccKey(e.target.value)}
+                autoComplete="off"
+                data-lpignore="true"
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                placeholder="Enter Binance API Key"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">API Secret</label>
+              <input
+                type="password"
+                value={newAccSecret}
+                onChange={(e) => setNewAccSecret(e.target.value)}
+                autoComplete="new-password"
+                data-lpignore="true"
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
+                placeholder="Enter Binance API Secret"
+                required
+              />
+>>>>>>> f6b4c9e (Auto-sync)
             </div>
 
             {/* API Checklist */}
@@ -4544,14 +5724,14 @@ export default function App() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button 
+              <button
                 type="button"
                 onClick={() => (document.getElementById('add-account-modal') as HTMLDialogElement)?.close()}
                 className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 type="submit"
                 className="flex-1 bg-sky-500 hover:bg-sky-400 text-black font-bold py-3 rounded-xl transition-all"
               >
@@ -4569,8 +5749,8 @@ export default function App() {
           <form onSubmit={handleUpdateAccount} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Label</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={editAccLabel}
                 onChange={(e) => setEditAccLabel(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -4580,8 +5760,8 @@ export default function App() {
             </div>
             <div>
               <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-1.5 ml-1">Group (Optional)</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={editAccGroup}
                 onChange={(e) => setEditAccGroup(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -4589,7 +5769,7 @@ export default function App() {
               />
             </div>
             <div className="flex gap-3 pt-2">
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setEditingAccount(null);
@@ -4599,7 +5779,7 @@ export default function App() {
               >
                 Cancel
               </button>
-              <button 
+              <button
                 type="submit"
                 className="flex-1 bg-sky-500 hover:bg-sky-400 text-black font-bold py-3 rounded-xl transition-all"
               >
@@ -4612,11 +5792,16 @@ export default function App() {
 
       {/* Trade Confirmation Modal */}
       {tradeConfirm && (
+<<<<<<< HEAD
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
           onClick={() => setTradeConfirm(null)}
         >
           <motion.div 
+=======
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <motion.div
+>>>>>>> f6b4c9e (Auto-sync)
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={(e) => e.stopPropagation()}
@@ -4713,7 +5898,7 @@ export default function App() {
                   <span>125x</span>
                 </div>
               </div>
-              
+
               <div className="p-4 bg-sky-500/5 border border-sky-500/10 rounded-xl">
                 <p className="text-[10px] text-sky-400/60 leading-relaxed">
                   This order will be executed across all enabled accounts. Please ensure you have sufficient balance and correct leverage settings.
@@ -4722,20 +5907,19 @@ export default function App() {
             </div>
 
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={() => setTradeConfirm(null)}
                 className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => executeTrade(tradeConfirm.side, true)}
                 disabled={loading}
-                className={`flex-1 font-bold py-3 rounded-xl transition-all shadow-lg ${
-                  tradeConfirm.side === 'BUY' 
-                    ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20' 
+                className={`flex-1 font-bold py-3 rounded-xl transition-all shadow-lg ${tradeConfirm.side === 'BUY'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
                     : 'bg-red-500 hover:bg-red-400 text-black shadow-red-500/20'
-                }`}
+                  }`}
               >
                 {loading ? 'Executing...' : 'Confirm Order'}
               </button>

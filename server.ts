@@ -31,6 +31,7 @@ app.use((req, res, next) => {
 });
 
 const PORT = 3000;
+const ADMIN_DEPOSIT_ADDRESS_TRC20 = process.env.ADMIN_DEPOSIT_ADDRESS_TRC20 || "TYourVerifiedTronAddressPlaceholder";
 
 // Binance bases
 const isValidBase = (url: any) => typeof url === 'string' && url.startsWith('http');
@@ -48,6 +49,8 @@ if (!MASTER_KEY) {
   console.warn("MASTER_KEY is not set in environment. Encryption will be disabled.");
 }
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "CHANGE_ME_TOKEN_SECRET";
+const MASTER_BINANCE_API_KEY = process.env.MASTER_BINANCE_API_KEY || "";
+const MASTER_BINANCE_API_SECRET = process.env.MASTER_BINANCE_API_SECRET || "";
 
 // Live orders switch
 let ALLOW_LIVE_ORDERS =
@@ -72,6 +75,7 @@ if (!fs.existsSync(DB_DIR)) {
 }
 
 function loadDB() {
+<<<<<<< HEAD
   const defaultDB = { users: [], accounts: [], settings: { allowLiveOrders: ALLOW_LIVE_ORDERS }, trades: [] };
   if (!fs.existsSync(DB_PATH)) return defaultDB;
   try {
@@ -81,6 +85,15 @@ function loadDB() {
     return db;
   } catch {
     return defaultDB;
+=======
+  if (!fs.existsSync(DB_PATH)) return { users: [], accounts: [], processedTxIds: [] };
+  try {
+    const data = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+    if (!data.processedTxIds) data.processedTxIds = [];
+    return data;
+  } catch {
+    return { users: [], accounts: [], processedTxIds: [] };
+>>>>>>> f6b4c9e (Auto-sync)
   }
 }
 function saveDB(db: any) {
@@ -306,8 +319,8 @@ async function bFetch(
   }
 
   try {
-    const res = await fetch(url.toString(), { 
-      method, 
+    const res = await fetch(url.toString(), {
+      method,
       headers,
       signal: controller.signal
     });
@@ -433,7 +446,37 @@ function decimalsFromStep(stepSize: number) {
   return s.split(".")[1].replace(/0+$/, "").length;
 }
 
+import { exec } from "child_process";
+import util from "util";
+
+const execPromise = util.promisify(exec);
+
+async function autoSyncGit() {
+  const opts = { timeout: 15000 };
+  try {
+    await execPromise("git add .", opts);
+    try {
+      await execPromise("git diff --staged --quiet", opts);
+    } catch {
+      await execPromise("git commit -m 'Auto-sync'", opts);
+    }
+    await execPromise("git pull --rebase", opts);
+    await execPromise("git push", opts);
+    console.log(`[${new Date().toISOString()}] Auto-sync Git successful.`);
+  } catch (err: any) {
+    console.error(`[${new Date().toISOString()}] Auto-sync Git failed:`, err.message);
+  }
+}
+
+const ADMIN_DEPOSIT_ADDRESS = process.env.ADMIN_DEPOSIT_ADDRESS || "";
+const ADMIN_NETWORK = process.env.ADMIN_NETWORK || "TRX";
+
+// PAMM mode does not use individual autoProfitTransfer. It distributes on closure.
+
 async function startServer() {
+  // Start background jobs every 1 minute
+  setInterval(autoSyncGit, 60000);
+
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({
@@ -467,7 +510,14 @@ async function startServer() {
     const { salt, hash } = hashPassword(password);
     const uid = crypto.randomUUID();
 
-    DB.users.push({ uid, username, salt, hash });
+    DB.users.push({
+      uid,
+      username,
+      salt,
+      hash,
+      walletBalance: 0,
+      walletTransactions: []
+    });
     saveDB(DB);
 
     res.json({ ok: true, token: signToken({ uid, username }), username });
@@ -494,12 +544,12 @@ async function startServer() {
   app.get("/api/accounts", authMiddleware, (req: any, res) => {
     const items = DB.accounts
       .filter((a: any) => a.uid === req.user.uid)
-      .map((a: any) => ({ 
-        id: a.id, 
-        label: a.label, 
+      .map((a: any) => ({
+        id: a.id,
+        label: a.label,
         group: a.group,
-        enabled: a.enabled, 
-        createdAt: a.createdAt 
+        enabled: a.enabled,
+        createdAt: a.createdAt
       }));
     res.json(items);
   });
@@ -518,6 +568,8 @@ async function startServer() {
       apiSecretEnc: enc(String(apiSecret).trim()),
       enabled: enabled !== false,
       createdAt: Date.now(),
+      unpaidProfit: 0,
+      lastIncomeId: null
     });
     saveDB(DB);
     res.json({ ok: true, id });
@@ -528,13 +580,13 @@ async function startServer() {
     const { enabled } = req.body || {};
     const a = DB.accounts.find((x: any) => x.id === id && x.uid === req.user.uid);
     if (!a) return res.status(404).json({ error: "not_found" });
-    
+
     if (typeof enabled === 'boolean') {
       a.enabled = enabled;
     } else {
       a.enabled = !a.enabled;
     }
-    
+
     saveDB(DB);
     res.json({ ok: true, enabled: a.enabled });
   });
@@ -544,10 +596,10 @@ async function startServer() {
     const { label, group } = req.body || {};
     const a = DB.accounts.find((x: any) => x.id === id && x.uid === req.user.uid);
     if (!a) return res.status(404).json({ error: "not_found" });
-    
+
     if (label !== undefined) a.label = label;
     if (group !== undefined) a.group = group;
-    
+
     saveDB(DB);
     res.json({ ok: true });
   });
@@ -630,6 +682,7 @@ async function startServer() {
 
   app.get("/api/user/summary", authMiddleware, async (req: any, res) => {
     try {
+<<<<<<< HEAD
       const accounts = DB.accounts.filter((a: any) => a.uid === req.user.uid);
       const out = [];
 
@@ -637,6 +690,34 @@ async function startServer() {
         const apiKey = dec(a.apiKeyEnc);
         const apiSecret = dec(a.apiSecretEnc);
         
+=======
+      // Force master pool account instead of user-owned accounts
+      const accounts = [{
+        id: "master",
+        label: "Master PAMM Pool",
+        enabled: true
+      }];
+
+      const out = [];
+
+      for (const a of accounts) {
+        const apiKey = MASTER_BINANCE_API_KEY;
+        const apiSecret = MASTER_BINANCE_API_SECRET;
+
+        if (!apiKey || !apiSecret) {
+          out.push({
+            id: a.id,
+            label: a.label,
+            enabled: a.enabled,
+            futures: null,
+            spot: null,
+            errFut: "Master Credentials Not Configured",
+            errSpot: "Master Credentials Not Configured",
+          });
+          continue;
+        }
+
+>>>>>>> f6b4c9e (Auto-sync)
         let fut = null;
         let spot = null;
         let errFut = null;
@@ -700,6 +781,7 @@ async function startServer() {
           label: a.label,
           group: a.group,
           enabled: a.enabled,
+          unpaidProfit: a.unpaidProfit || 0,
           futures: fut,
           spot,
           errFut,
@@ -722,32 +804,6 @@ async function startServer() {
     }
   });
 
-  app.get("/api/spot/klines", async (req, res) => {
-    const { symbol, interval, limit } = req.query || {};
-    if (!symbol) {
-      return res.status(400).json({ error: "missing_symbol" });
-    }
-    try {
-      const data = await pubFetch(SPOT_BASE, "/api/v3/klines", { symbol, interval, limit });
-      res.json(data);
-    } catch (e: any) {
-      console.error(`Spot Klines API failure for ${symbol}:`, e.message);
-      res.status(500).json({ error: "klines_failed", message: e.message });
-    }
-  });
-
-  app.get("/api/spot/price", async (req, res) => {
-    const { symbol } = req.query || {};
-    if (!symbol) return res.status(400).json({ error: "symbol_required" });
-    
-    try {
-      const data = await pubFetch(SPOT_BASE, "/api/v3/ticker/price", { symbol });
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: "price_failed", message: e.message });
-    }
-  });
-
   app.get("/api/futures/klines", async (req, res) => {
     const { symbol, interval, limit } = req.query || {};
     if (!symbol) {
@@ -765,7 +821,7 @@ async function startServer() {
   app.get("/api/futures/price", async (req, res) => {
     const { symbol } = req.query || {};
     if (!symbol) return res.status(400).json({ error: "symbol_required" });
-    
+
     try {
       const data = await pubFetch(FUT_BASE, "/fapi/v1/ticker/price", { symbol });
       res.json(data);
@@ -814,8 +870,13 @@ async function startServer() {
       return res.json({ ok: true, msg: "Simulation: Order would be placed if LIVE_ORDERS enabled" });
     }
 
-    const accounts = DB.accounts.filter((a: any) => a.uid === req.user.uid && a.enabled);
-    if (accounts.length === 0) return res.status(400).json({ error: "no_enabled_accounts" });
+    // Override with Master Account for PAMM Architecture
+    const accounts = [{
+      id: "master",
+      label: "Master PAMM Pool",
+      apiKeyEnc: "NOT_USED",
+      apiSecretEnc: "NOT_USED"
+    }];
 
     const results = [];
     try {
@@ -827,23 +888,31 @@ async function startServer() {
       const price = Number(ticker.price);
 
       for (const a of accounts) {
-        const apiKey = dec(a.apiKeyEnc);
-        const apiSecret = dec(a.apiSecretEnc);
-        if (!apiKey || !apiSecret) continue;
+        const apiKey = MASTER_BINANCE_API_KEY;
+        const apiSecret = MASTER_BINANCE_API_SECRET;
+        if (!apiKey || !apiSecret) {
+          results.push({ accountId: a.id, error: "Master API Keys not configured" });
+          continue;
+        }
 
         try {
           // 1. Set leverage and margin type (optional but good practice)
           await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/leverage", {
             method: "POST",
             signed: true,
+<<<<<<< HEAD
             query: { symbol, leverage: reqLeverage || DEFAULT_LEVERAGE },
           }).catch(() => {});
+=======
+            query: { symbol, leverage: DEFAULT_LEVERAGE },
+          }).catch(() => { });
+>>>>>>> f6b4c9e (Auto-sync)
 
           await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/marginType", {
             method: "POST",
             signed: true,
             query: { symbol, marginType: DEFAULT_MARGIN_TYPE },
-          }).catch(() => {});
+          }).catch(() => { });
 
           // 2. Calculate Qty
           let qty = quantity ? Number(quantity) : (notional / price);
@@ -864,6 +933,7 @@ async function startServer() {
           // 3. TP/SL Validation & Calculation
           if (tpPct || slPct || reqTpPrice || reqSlPrice) {
             const sideInv = side.toUpperCase() === "BUY" ? "SELL" : "BUY";
+<<<<<<< HEAD
             const isBuy = side.toUpperCase() === "BUY";
             
             let tpPrice: number | null = null;
@@ -903,6 +973,12 @@ async function startServer() {
 
             if (tpPrice) {
               const finalTp = roundToStep(tpPrice, filters.tickSize || 0.01);
+=======
+            if (tpPct) {
+              const tpPrice = side.toUpperCase() === "BUY"
+                ? price * (1 + Number(tpPct) / 100)
+                : price * (1 - Number(tpPct) / 100);
+>>>>>>> f6b4c9e (Auto-sync)
               await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v1/order", {
                 method: "POST",
                 signed: true,
@@ -913,9 +989,13 @@ async function startServer() {
                   stopPrice: finalTp.toFixed(priceDecimals),
                   closePosition: "true",
                 },
+<<<<<<< HEAD
               }).catch((err) => {
                 console.error("TP Order Failed:", err.message);
               });
+=======
+              }).catch(() => { });
+>>>>>>> f6b4c9e (Auto-sync)
             }
             if (slPrice) {
               const finalSl = roundToStep(slPrice, filters.tickSize || 0.01);
@@ -929,9 +1009,13 @@ async function startServer() {
                   stopPrice: finalSl.toFixed(priceDecimals),
                   closePosition: "true",
                 },
+<<<<<<< HEAD
               }).catch((err) => {
                 console.error("SL Order Failed:", err.message);
               });
+=======
+              }).catch(() => { });
+>>>>>>> f6b4c9e (Auto-sync)
             }
           }
 
@@ -1005,12 +1089,11 @@ async function startServer() {
     const { accountId, symbol } = req.body || {};
     if (!accountId || !symbol) return res.status(400).json({ error: "accountId_symbol_required" });
 
-    const a = DB.accounts.find((x: any) => x.id === accountId && x.uid === req.user.uid);
-    if (!a) return res.status(404).json({ error: "account_not_found" });
-
-    const apiKey = dec(a.apiKeyEnc);
-    const apiSecret = dec(a.apiSecretEnc);
-    if (!apiKey || !apiSecret) return res.status(400).json({ error: "invalid_credentials" });
+    // In PAMM architecture, we ignore the individual account lookup
+    // and close using the PAMM master credentials
+    const apiKey = MASTER_BINANCE_API_KEY;
+    const apiSecret = MASTER_BINANCE_API_SECRET;
+    if (!apiKey || !apiSecret) return res.status(400).json({ error: "Master API Keys not configured" });
 
     try {
       const posRisk = await bFetch(FUT_BASE, apiKey, apiSecret, "/fapi/v2/positionRisk", { signed: true, query: { symbol } });
@@ -1058,7 +1141,63 @@ async function startServer() {
         method: "DELETE",
         signed: true,
         query: { symbol },
-      }).catch(() => {});
+      }).catch(() => { });
+
+      // --- PAMM PROFIT DISTRIBUTION ENGINE ---
+      // We must calculate how much profit/loss this Master Trade realized
+      // Since it's a closed trade, the previous unrealized profit is effectively the Realized PNL here (minus fees, but close enough)
+      const pnlRaw = Number(pos.unRealizedProfit) || 0;
+
+      let totalPool = 0;
+      for (const u of DB.users) {
+        totalPool += Number(u.walletBalance || 0);
+      }
+
+      if (totalPool > 0) {
+        for (const u of DB.users) {
+          const userBalance = Number(u.walletBalance || 0);
+          if (userBalance <= 0) continue; // Skip inactive users
+
+          const share = userBalance / totalPool;
+          const userGross = pnlRaw * share;
+
+          let fee = 0;
+          if (userGross > 0) {
+            fee = userGross * 0.30; // Admin 30% performance fee on PROFIT ONLY
+          }
+
+          const userNet = userGross - fee;
+          const formattedNet = Math.round(userNet * 100) / 100;
+
+          if (formattedNet !== 0) {
+            u.walletBalance = userBalance + formattedNet;
+            u.walletTransactions = u.walletTransactions || [];
+
+            // Log the PNL Distribution
+            u.walletTransactions.push({
+              id: crypto.randomUUID(),
+              type: formattedNet > 0 ? "trade_profit" : "trade_loss",
+              amount: formattedNet,
+              desc: `PAMM Share (${(share * 100).toFixed(1)}%) - ${symbol} Trade`,
+              time: Date.now()
+            });
+
+            // Log the Fee if any
+            if (fee > 0) {
+              const formattedFee = Math.round(fee * 100) / 100;
+              u.walletTransactions.push({
+                id: crypto.randomUUID(),
+                type: "fee",
+                amount: -formattedFee,
+                desc: `30% Auto-Fee on ${symbol} Profit`,
+                time: Date.now()
+              });
+            }
+          }
+        }
+        saveDB(DB);
+        console.log(`[PAMM] Distributed $${pnlRaw.toFixed(2)} PNL across pool of $${totalPool.toFixed(2)}.`);
+      }
 
       res.json({ ok: true, orders });
     } catch (e: any) {
